@@ -1,0 +1,22 @@
+# Dev-shell local toolchain state
+/.mix/
+/.hex/
+
+# Build artifacts (per mix project)
+**/_build/
+**/deps/
+**/node_modules/
+**/.elixir_ls/
+
+# SQLite databases (dev/test)
+*.db
+*.db-*
+*.db-shm
+*.db-wal
+
+# Elixir crash dumps
+erl_crash.dump
+
+# Direnv
+.direnv/
+.envrc
