@@ -12,7 +12,7 @@ defmodule SapoCoreWeb.ModuleRouter do
 
   # Paths owned by core; modules may not claim them.
   @reserved_ui_paths ["/", "/settings", "/assistant"]
-  @reserved_api_paths ["/claude-context", "/notify", "/snapshot"]
+  @reserved_api_paths ["/claude-context", "/snapshot"]
 
   @doc "Reserved core UI paths."
   def reserved_ui_paths, do: @reserved_ui_paths
