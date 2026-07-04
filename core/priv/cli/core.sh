@@ -46,6 +46,7 @@ Core:
   destinations  list | create --name <n> --channel <c> --config <json> |
                 delete <id> | set-default <id>
   storage     list | get <path> [-o <file>] | delete <path>
+  snapshot    list | save | download <name> [-o <file>]
 
 Utilities:${SAPO_CLI_HELP:-
   (none)}
@@ -127,6 +128,22 @@ sapo_cmd_destinations() {
     set-default) [ -n "${1:-}" ] || die "usage: sapo destinations set-default <id>"
       api_post "/notification-destinations/$1/set-default" ;;
     *) die "usage: sapo destinations list | create | delete <id> | set-default <id>" ;;
+  esac
+}
+
+sapo_cmd_snapshot() {
+  local action="${1:-list}"
+  shift || true
+  case "$action" in
+    list) api_get /snapshot ;;
+    save) api_post /snapshot '{}' ;;
+    download)
+      [ -n "${1:-}" ] || die "usage: sapo snapshot download <name> [-o <file>]"
+      local name="$1"
+      shift
+      curl -sS -o "${2:-$name}" "$SAPO_API_BASE/snapshot/$name"
+      ;;
+    *) die "usage: sapo snapshot list | save | download <name> [-o <file>]" ;;
   esac
 }
 

@@ -13,8 +13,19 @@ config :sapo_core, sapo_cli_path: Path.expand("../_build/dev/sapo", __DIR__)
 config :sapo_core, SapoCore.Repo,
   database: Path.expand("../sapo_core_dev.db", __DIR__),
   pool_size: 5,
+  journal_mode: :wal,
+  busy_timeout: 5000,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true
+
+# Snapshots + boot-time restore staging (dev paths).
+config :sapo_core,
+  snapshots_dir: Path.expand("../tmp/snapshots", __DIR__),
+  restore_pending: Path.expand("../tmp/restore/pending.tar.gz", __DIR__)
+
+# Deploy is production-only; dev gets a stand-in so the button is testable.
+config :sapo_core,
+  deploy_cmd: {"bash", ["-lc", "echo '[dev] deploy is only available in production builds'"]}
 
 # For development, we disable any cache and enable
 # debugging and code reloading.

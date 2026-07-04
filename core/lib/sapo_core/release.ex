@@ -7,6 +7,36 @@ defmodule SapoCore.Release do
 
   @app :sapo_core
 
+  @doc """
+  Boot-time snapshot restore (systemd ExecStartPre, BEFORE migrate/0).
+
+  If a staged archive exists at `:restore_pending` (deploy `--snapshot`
+  stages it there), restore it and remove the stage file. A failed restore
+  leaves the stage file for inspection and raises so the boot aborts —
+  `pre-restore-backup.sqlite3` sits next to the DB either way.
+  """
+  def maybe_restore do
+    load_app()
+    pending = Application.get_env(@app, :restore_pending)
+
+    cond do
+      is_nil(pending) or not File.exists?(pending) ->
+        :ok
+
+      true ->
+        case SapoCore.Snapshot.restore_from(pending) do
+          :ok ->
+            File.rm!(pending)
+            :ok
+
+          {:error, reason} ->
+            raise "snapshot restore from #{pending} failed: #{inspect(reason)}. " <>
+                    "The previous DB is preserved as pre-restore-backup.sqlite3; " <>
+                    "remove the staged file to boot without restoring."
+        end
+    end
+  end
+
   def migrate do
     load_app()
 

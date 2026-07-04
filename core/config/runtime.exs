@@ -30,7 +30,17 @@ if config_env() == :prod do
 
   config :sapo_core, SapoCore.Repo,
     database: database_path,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5"),
+    journal_mode: :wal,
+    busy_timeout: 5000
+
+  state_dir = Path.dirname(database_path)
+
+  config :sapo_core,
+    snapshots_dir: System.get_env("SNAPSHOTS_DIR") || Path.join(state_dir, "snapshots"),
+    restore_pending:
+      System.get_env("RESTORE_PENDING") || Path.join(state_dir, "restore/pending.tar.gz"),
+    deploy_cmd: {"sudo", [System.get_env("DEPLOY_BIN") || "sapohub-deploy"]}
 
   storage_root =
     System.get_env("STORAGE_ROOT") ||

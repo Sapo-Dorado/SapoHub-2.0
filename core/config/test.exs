@@ -3,6 +3,11 @@ import Config
 # Module file storage root (dirs auto-created at boot).
 config :sapo_core, storage_root: Path.expand("../tmp/storage_test", __DIR__)
 
+config :sapo_core,
+  snapshots_dir: Path.expand("../tmp/snapshots_test", __DIR__),
+  restore_pending: Path.expand("../tmp/restore_test/pending.tar.gz", __DIR__),
+  deploy_cmd: {"bash", ["-lc", "echo deploy-stub"]}
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used

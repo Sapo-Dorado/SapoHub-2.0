@@ -24,6 +24,7 @@ defmodule SapoCoreWeb.Router do
     live_session :default do
       live "/", SapoCoreWeb.DashboardLive, :index
       live "/assistant", SapoCoreWeb.AssistantLive, :index
+      live "/settings", SapoCoreWeb.SettingsLive, :index
 
       module_live_routes()
     end
@@ -41,6 +42,10 @@ defmodule SapoCoreWeb.Router do
     post "/notification-destinations", DestinationController, :create
     delete "/notification-destinations/:id", DestinationController, :delete
     post "/notification-destinations/:id/set-default", DestinationController, :set_default
+
+    get "/snapshot", SnapshotController, :index
+    post "/snapshot", SnapshotController, :create
+    get "/snapshot/:name", SnapshotController, :download
 
     get "/storage/files", StorageController, :index
     get "/storage/files/*path", StorageController, :show

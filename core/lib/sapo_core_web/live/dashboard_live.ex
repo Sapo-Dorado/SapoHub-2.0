@@ -56,6 +56,16 @@ defmodule SapoCoreWeb.DashboardLive do
 
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <.link
+            navigate={~p"/settings"}
+            id="tile-settings"
+            class="card border border-base-300 p-4 hover:border-primary transition-colors"
+          >
+            <div class="flex items-center gap-3">
+              <.icon name="hero-cog-6-tooth" class="size-6" />
+              <span class="font-medium">Settings</span>
+            </div>
+          </.link>
+          <.link
             navigate={~p"/assistant"}
             id="tile-assistant"
             class="card border border-base-300 p-4 hover:border-primary transition-colors"

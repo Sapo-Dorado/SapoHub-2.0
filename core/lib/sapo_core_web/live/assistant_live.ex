@@ -261,6 +261,14 @@ defmodule SapoCoreWeb.AssistantLive do
         <.link navigate={~p"/"} class="text-[#7FB069] font-semibold">sapohub</.link>
         <span class="text-[#86948F] px-2">/</span>
         <span class="text-[#E6ECE9]">assistant</span>
+        <span class="flex-1"></span>
+        <.link
+          navigate={~p"/settings"}
+          aria-label="Settings"
+          class="text-[#86948F] hover:text-[#7FB069]"
+        >
+          ⚙
+        </.link>
       </nav>
 
       <%!-- Tab bar --%>
