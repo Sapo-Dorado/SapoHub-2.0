@@ -32,6 +32,20 @@ if config_env() == :prod do
     database: database_path,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
 
+  storage_root =
+    System.get_env("STORAGE_ROOT") ||
+      raise """
+      environment variable STORAGE_ROOT is missing.
+      For example: /var/lib/sapohub/storage
+      """
+
+  config :sapo_core, storage_root: storage_root
+
+  # Core secrets validated as hard boot requirements by SapoCore.Secrets.
+  # SECRET_KEY_BASE / DATABASE_PATH already raise above; list any further
+  # core-owned env vars here.
+  config :sapo_core, core_secrets: []
+
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
   # want to use a different value for prod and you most likely don't want

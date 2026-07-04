@@ -69,6 +69,7 @@ defmodule SapoCore.MixProject do
        app: false,
        compile: false,
        depth: 1},
+      {:nimble_options, "~> 1.1"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
