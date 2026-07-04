@@ -2,16 +2,16 @@ defmodule SapoKit.Storage do
   @moduledoc """
   Core file storage facade.
 
-  Each module owns one directory (default `<storage root>/<module id>`,
-  overridable in the hub config). The filesystem is the source of truth:
-  write ordinary files, and they show up in the storage API/CLI and in
-  snapshots automatically.
+  Storage is OPT-IN: declare a non-empty `c:SapoKit.Module.storage_paths/0`
+  (`["."]` for just a directory) and your module gets a dedicated directory
+  (default `<storage root>/<module id>`, overridable in the hub config).
+  The filesystem is the source of truth: write ordinary files, and they
+  show up in the storage API/CLI and in snapshots automatically.
 
       dir = SapoKit.Storage.dir(:my_plate)
       File.write!(Path.join(dir, "export.csv"), csv)
 
-  Subdirectories a module wants pre-created are declared via
-  `c:SapoKit.Module.storage_paths/0` (relative to the module's dir).
+  Modules that have not opted in have no storage directory.
   """
 
   @doc "The module's storage directory (created at boot)."

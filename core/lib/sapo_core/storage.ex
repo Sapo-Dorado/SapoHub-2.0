@@ -3,11 +3,12 @@ defmodule SapoCore.Storage do
   Core file storage (backs `SapoKit.Storage`). v1-shaped: the filesystem is
   the source of truth.
 
-  Each module owns ONE directory — `<storage root>/<module id>` by default,
-  overridable per utility via `config :sapo_core, :storage_dirs, %{...}`
-  (fed from the nix config / prefs). Subdirs a module wants pre-created are
-  its `storage_paths/0`, relative to its dir. Everything under module dirs
-  is listed by the file API and included in snapshots (M5).
+  Storage is OPT-IN: only modules with a non-empty `storage_paths/0` get a
+  directory — `<storage root>/<module id>` by default, overridable per
+  utility via `config :sapo_core, :storage_dirs, %{...}` (fed from the nix
+  config / prefs). `storage_paths/0` entries are subdirs to pre-create
+  (`["."]` = just the dir). Everything under opted-in dirs is listed by the
+  file API and included in snapshots (M5).
   """
 
   alias SapoCore.Generated.Registry
@@ -32,12 +33,12 @@ defmodule SapoCore.Storage do
     Path.join(dir(module_id), relative)
   end
 
-  @doc "Create the root, every module's dir and its declared subdirs."
+  @doc "Create the root plus dir + declared subdirs for opted-in modules."
   @spec ensure_dirs!([module()]) :: :ok
   def ensure_dirs!(modules \\ Registry.modules()) do
     File.mkdir_p!(root())
 
-    for mod <- modules do
+    for mod <- storage_modules(modules) do
       base = dir(mod.id())
       File.mkdir_p!(base)
       for rel <- mod.storage_paths(), do: File.mkdir_p!(Path.join(base, rel))
@@ -46,15 +47,22 @@ defmodule SapoCore.Storage do
     :ok
   end
 
+  @doc "Modules that opted into storage (non-empty `storage_paths/0`)."
+  @spec storage_modules([module()]) :: [module()]
+  def storage_modules(modules \\ Registry.modules()) do
+    Enum.filter(modules, &(&1.storage_paths() != []))
+  end
+
   # ── File API (used by /api/storage and the sapo CLI) ───────────────────────
 
   @typedoc "API paths are `<module_id>/<relative path>`."
   @type entry :: %{path: String.t(), size: non_neg_integer(), mtime: DateTime.t()}
 
-  @doc "All files across all enabled modules' storage dirs."
+  @doc "All files across opted-in modules' storage dirs."
   @spec list_files([module()]) :: [entry()]
   def list_files(modules \\ Registry.modules()) do
     modules
+    |> storage_modules()
     |> Enum.flat_map(fn mod ->
       base = dir(mod.id())
 
@@ -75,12 +83,13 @@ defmodule SapoCore.Storage do
 
   @doc """
   Resolve an API path (`<module_id>/<relative>`) to an absolute file path.
-  Rejects traversal outside the module's dir and unknown modules.
+  Rejects traversal outside the module's dir, unknown modules, and modules
+  that have not opted into storage.
   """
   @spec resolve(String.t(), [module()]) :: {:ok, String.t()} | {:error, :invalid_path}
   def resolve(api_path, modules \\ Registry.modules()) do
     with [module_part | rest] when rest != [] <- Path.split(api_path),
-         %{} = mod <- find_module(modules, module_part) do
+         %{} = mod <- find_module(storage_modules(modules), module_part) do
       base = Path.expand(dir(mod.id))
       abs = Path.expand(Path.join([base | rest]))
 

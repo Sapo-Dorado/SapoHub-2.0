@@ -74,9 +74,12 @@ defmodule SapoKit.Module do
   @callback children(config :: map()) :: [Supervisor.child_spec() | {module(), term()} | module()]
 
   @doc """
-  Subdirectories to pre-create inside this module's storage directory
-  (`SapoKit.Storage.dir(id)`), relative to it. The module's directory
-  itself always exists and is included in snapshots.
+  Storage is OPT-IN: the default `[]` means this module has no storage
+  directory at all. Return a non-empty list to get a dedicated directory
+  (`SapoKit.Storage.dir(id)`) — the entries are subdirectories to
+  pre-create inside it, relative to it; return `["."]` for just the
+  directory itself. Opted-in directories appear in the storage file API
+  and in snapshots.
   """
   @callback storage_paths() :: [String.t()]
 

@@ -39,6 +39,11 @@ defmodule SapoHello.Module do
     ]
   end
 
+  # Storage is opt-in: returning a non-empty list gives this module a
+  # dedicated directory (["."] = just the directory, no subdirs).
+  @impl true
+  def storage_paths, do: ["."]
+
   @impl true
   def ai_context do
     """

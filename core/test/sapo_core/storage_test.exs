@@ -10,6 +10,12 @@ defmodule SapoCore.StorageTest do
     def storage_paths, do: ["exports", "cache/thumbs"]
   end
 
+  defmodule NoStorageModule do
+    use SapoKit.Module
+    def id, do: :no_storage_mod
+    def title, do: "NoStorage"
+  end
+
   setup do
     root = Path.join(System.tmp_dir!(), "sapo_storage_test_#{System.unique_integer([:positive])}")
     previous = Application.get_env(:sapo_core, :storage_root)
@@ -38,6 +44,21 @@ defmodule SapoCore.StorageTest do
 
     assert File.dir?(Path.join(root, "files_mod/exports"))
     assert File.dir?(Path.join(root, "files_mod/cache/thumbs"))
+  end
+
+  test "storage is opt-in: modules without storage_paths get nothing", %{root: root} do
+    :ok = Storage.ensure_dirs!([NoStorageModule, FilesModule])
+
+    refute File.dir?(Path.join(root, "no_storage_mod"))
+
+    # Even if a file existed there, the API would not expose it.
+    File.mkdir_p!(Path.join(root, "no_storage_mod"))
+    File.write!(Path.join(root, "no_storage_mod/sneaky.txt"), "hi")
+
+    assert Storage.list_files([NoStorageModule, FilesModule]) == []
+
+    assert {:error, :invalid_path} =
+             Storage.resolve("no_storage_mod/sneaky.txt", [NoStorageModule, FilesModule])
   end
 
   test "list_files walks module dirs with metadata", %{root: root} do
