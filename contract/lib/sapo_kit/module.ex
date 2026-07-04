@@ -5,8 +5,13 @@ defmodule SapoKit.Module do
   A util module is a standalone mix project depending only on
   `:sapo_module_kit`. It declares everything SapoHub core needs to integrate
   it: UI routes and a dashboard tile, API routes, migrations, scheduler hooks,
-  supervision children, storage paths, required secrets, provided
-  capabilities, an AI-context fragment and a config schema.
+  supervision children, storage paths, required secrets, an AI-context
+  fragment and a config schema.
+
+  Util modules are COMPLETELY INDEPENDENT of each other: they never call
+  other modules and never expose APIs to them. Anything more than one module
+  needs (notifications, storage, scheduling, ...) is core functionality,
+  reached through the `SapoKit.*` facades.
 
   Use it like:
 
@@ -77,13 +82,6 @@ defmodule SapoKit.Module do
   @doc "Names of secret environment variables this module requires."
   @callback required_secrets() :: [String.t()]
 
-  @doc """
-  Capabilities this module PROVIDES to other modules, e.g.
-  `[reminders: MyReminders.CapabilityImpl]`. Consumers look these up via
-  `SapoKit.Capabilities.get/1` and degrade gracefully when absent.
-  """
-  @callback capabilities() :: keyword(module())
-
   @doc "Markdown fragment for the AI assistant context, or `nil`."
   @callback ai_context() :: String.t() | nil
 
@@ -133,9 +131,6 @@ defmodule SapoKit.Module do
       def required_secrets, do: []
 
       @impl true
-      def capabilities, do: []
-
-      @impl true
       def ai_context, do: nil
 
       @impl true
@@ -150,7 +145,6 @@ defmodule SapoKit.Module do
                      children: 1,
                      storage_paths: 0,
                      required_secrets: 0,
-                     capabilities: 0,
                      ai_context: 0,
                      config_schema: 0
     end

@@ -10,11 +10,9 @@ defmodule SapoCore.Application do
     # Boot sequence (fail fast, before any child starts):
     # 1. validate module configs against their config_schema
     # 2. validate secrets (core → raise; module → warn + Settings status)
-    # 3. build the capability map
-    # 4. ensure module storage dirs exist
+    # 3. ensure module storage dirs exist
     SapoCore.ModuleConfig.validate!()
     SapoCore.Secrets.validate!()
-    SapoCore.Capabilities.build!()
     SapoCore.Storage.ensure_dirs!()
 
     children =
