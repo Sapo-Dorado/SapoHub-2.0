@@ -73,8 +73,16 @@ defmodule SapoCoreWeb.ModuleRouterTest do
       end
     end
 
-    test "non-reserved paths like /notify are allowed" do
-      assert :ok == ModuleRouter.check_api_routes!([{FakeModA, api_route(:post, "/notify")}])
+    test "core-service paths are reserved" do
+      for path <- ["/notify", "/notification-destinations", "/storage/files"] do
+        assert_raise CompileError, ~r/reserved by SapoHub core/, fn ->
+          ModuleRouter.check_api_routes!([{FakeModA, api_route(:post, path)}])
+        end
+      end
+    end
+
+    test "non-reserved paths are allowed" do
+      assert :ok == ModuleRouter.check_api_routes!([{FakeModA, api_route(:post, "/things")}])
     end
   end
 end

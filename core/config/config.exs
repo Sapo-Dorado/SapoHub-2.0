@@ -15,7 +15,11 @@ config :sapo_core,
 config :sapo_module_kit,
   repo: SapoCore.Repo,
   pubsub: SapoCore.PubSub,
-  layouts: SapoCoreWeb.Layouts
+  layouts: SapoCoreWeb.Layouts,
+  notify: SapoCore.Notify,
+  http: SapoCore.HTTP,
+  storage: SapoCore.Storage,
+  scheduler: SapoCore.Scheduler
 
 # Configures the endpoint
 config :sapo_core, SapoCoreWeb.Endpoint,

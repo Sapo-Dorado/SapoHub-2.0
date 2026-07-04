@@ -22,6 +22,7 @@ defmodule SapoCore.Application do
         {DNSCluster, query: Application.get_env(:sapo_core, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: SapoCore.PubSub},
         {Task.Supervisor, name: SapoCore.TaskSupervisor},
+        {Finch, name: SapoCore.Finch},
         {SapoCore.Scheduler, hooks: module_hooks()},
         SapoCoreWeb.Endpoint
       ] ++ module_children()

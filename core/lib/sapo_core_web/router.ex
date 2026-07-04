@@ -28,6 +28,22 @@ defmodule SapoCoreWeb.Router do
     end
   end
 
+  scope "/api", SapoCoreWeb.Api do
+    pipe_through :api
+
+    # Core services
+    post "/notify", NotifyController, :create
+
+    get "/notification-destinations", DestinationController, :index
+    post "/notification-destinations", DestinationController, :create
+    delete "/notification-destinations/:id", DestinationController, :delete
+    post "/notification-destinations/:id/set-default", DestinationController, :set_default
+
+    get "/storage/files", StorageController, :index
+    get "/storage/files/*path", StorageController, :show
+    delete "/storage/files/*path", StorageController, :delete
+  end
+
   scope "/api" do
     pipe_through :api
 

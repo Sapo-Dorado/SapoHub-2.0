@@ -74,8 +74,9 @@ defmodule SapoKit.Module do
   @callback children(config :: map()) :: [Supervisor.child_spec() | {module(), term()} | module()]
 
   @doc """
-  Directories this module owns, relative to the storage root.
-  Created at boot and included in snapshots.
+  Subdirectories to pre-create inside this module's storage directory
+  (`SapoKit.Storage.dir(id)`), relative to it. The module's directory
+  itself always exists and is included in snapshots.
   """
   @callback storage_paths() :: [String.t()]
 
