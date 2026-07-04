@@ -36,6 +36,8 @@
               pkgs.esbuild
               pkgs.inotify-tools
               pkgs.patchelf
+              pkgs.jq
+              pkgs.curl
             ];
 
             shellHook = ''
@@ -43,6 +45,8 @@
               export HEX_HOME="$PWD/.hex"
               export PATH="$MIX_HOME/escripts:$PATH"
               export ERL_AFLAGS="-kernel shell_history enabled"
+              # Dev-assembled sapo CLI (mix sapo.gen.cli) lives in _build.
+              export PATH="$PWD/core/_build/dev:$PATH"
               # Use the nix-built tailwind v4 instead of the generic-linux
               # binary the `mix tailwind` installer downloads (segfaults after
               # patchelf; Bun-compiled binaries don't tolerate it).

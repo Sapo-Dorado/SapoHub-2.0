@@ -33,6 +33,8 @@ defmodule SapoCoreWeb.Router do
     pipe_through :api
 
     # Core services
+    get "/claude-context", ClaudeContextController, :show
+
     post "/notify", NotifyController, :create
 
     get "/notification-destinations", DestinationController, :index

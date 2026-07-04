@@ -6,6 +6,9 @@ config :sapo_core, storage_root: Path.expand("../tmp/storage", __DIR__)
 # Assistant sessions run in the repo root in dev.
 config :sapo_core, assistant_workdir: Path.expand("../..", __DIR__)
 
+# Dev-assembled CLI (mix sapo.gen.cli) for the AI-context CLI reference.
+config :sapo_core, sapo_cli_path: Path.expand("../_build/dev/sapo", __DIR__)
+
 # Configure your database
 config :sapo_core, SapoCore.Repo,
   database: Path.expand("../sapo_core_dev.db", __DIR__),
