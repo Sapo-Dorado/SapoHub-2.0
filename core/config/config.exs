@@ -42,9 +42,11 @@ config :esbuild,
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
 
-# Configure tailwind (the version is required)
+# Configure tailwind (the version is required). TAILWIND_PATH (set by the
+# nix devshell) points at a nix-built binary; unset means download.
 config :tailwind,
   version: "4.1.7",
+  path: System.get_env("TAILWIND_PATH"),
   sapo_core: [
     args: ~w(
       --input=assets/css/app.css

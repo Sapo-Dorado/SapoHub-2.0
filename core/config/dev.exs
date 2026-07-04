@@ -3,6 +3,9 @@ import Config
 # Module file storage root (dirs auto-created at boot; snapshotted in M5).
 config :sapo_core, storage_root: Path.expand("../tmp/storage", __DIR__)
 
+# Assistant sessions run in the repo root in dev.
+config :sapo_core, assistant_workdir: Path.expand("../..", __DIR__)
+
 # Configure your database
 config :sapo_core, SapoCore.Repo,
   database: Path.expand("../sapo_core_dev.db", __DIR__),

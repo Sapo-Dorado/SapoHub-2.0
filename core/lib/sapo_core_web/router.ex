@@ -23,6 +23,7 @@ defmodule SapoCoreWeb.Router do
     # pages reuses one LiveView websocket (required for <.link navigate>).
     live_session :default do
       live "/", SapoCoreWeb.DashboardLive, :index
+      live "/assistant", SapoCoreWeb.AssistantLive, :index
 
       module_live_routes()
     end

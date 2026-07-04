@@ -55,6 +55,16 @@ defmodule SapoCoreWeb.DashboardLive do
         <h1 class="text-2xl font-semibold">SapoHub</h1>
 
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <.link
+            navigate={~p"/assistant"}
+            id="tile-assistant"
+            class="card border border-base-300 p-4 hover:border-primary transition-colors"
+          >
+            <div class="flex items-center gap-3">
+              <.icon name="hero-command-line" class="size-6" />
+              <span class="font-medium">Assistant</span>
+            </div>
+          </.link>
           <.module_tile
             :for={{id, tile} <- @tiles}
             id={id}

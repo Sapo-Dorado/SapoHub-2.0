@@ -4,9 +4,11 @@
   inputs = {
     # Pinned to the same rev as SapoHub v1 so the local store is warm.
     nixpkgs.url = "github:NixOS/nixpkgs/4df1b885d76a54e1aa1a318f8d16fd6005b6401f";
+    # Newer nixpkgs ONLY for tools missing from the pinned rev (tailwind v4).
+    nixpkgs-tools.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, nixpkgs-tools }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
@@ -20,6 +22,7 @@
       devShells = forAllSystems (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          toolsPkgs = nixpkgs-tools.legacyPackages.${system};
           beamPkgs = pkgs.beam.packages.erlang_27;
         in
         {
@@ -29,9 +32,10 @@
               beamPkgs.erlang
               pkgs.nodejs_22
               pkgs.sqlite
-              pkgs.tailwindcss
+              toolsPkgs.tailwindcss_4
               pkgs.esbuild
               pkgs.inotify-tools
+              pkgs.patchelf
             ];
 
             shellHook = ''
@@ -39,6 +43,34 @@
               export HEX_HOME="$PWD/.hex"
               export PATH="$MIX_HOME/escripts:$PATH"
               export ERL_AFLAGS="-kernel shell_history enabled"
+              # Use the nix-built tailwind v4 instead of the generic-linux
+              # binary the `mix tailwind` installer downloads (segfaults after
+              # patchelf; Bun-compiled binaries don't tolerate it).
+              export TAILWIND_PATH="${toolsPkgs.tailwindcss_4}/bin/tailwindcss"
+
+              # The expty precompiled NIF ships a spawn-helper binary linked
+              # against the generic /lib64 dynamic linker, which does not
+              # exist on NixOS. Patch any copies in _build (idempotent,
+              # dev-only; M6's mixRelease does the same for releases).
+              for helper in core/_build/*/lib/expty/priv/spawn-helper; do
+                if [ -f "$helper" ]; then
+                  patchelf \
+                    --set-interpreter "$(cat ${pkgs.stdenv.cc}/nix-support/dynamic-linker)" \
+                    --set-rpath "${pkgs.stdenv.cc.cc.lib}/lib" \
+                    "$helper" 2>/dev/null || true
+                fi
+              done
+
+              # Same treatment for the tailwind v4 standalone binary that the
+              # `mix tailwind` installer downloads (generic-linux linked).
+              for tw in core/_build/tailwind-linux-*; do
+                if [ -f "$tw" ]; then
+                  patchelf \
+                    --set-interpreter "$(cat ${pkgs.stdenv.cc}/nix-support/dynamic-linker)" \
+                    --set-rpath "${pkgs.stdenv.cc.cc.lib}/lib" \
+                    "$tw" 2>/dev/null || true
+                fi
+              done
             '';
           };
         });

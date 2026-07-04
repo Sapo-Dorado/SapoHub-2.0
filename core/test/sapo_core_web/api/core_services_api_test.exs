@@ -34,6 +34,29 @@ defmodule SapoCoreWeb.Api.CoreServicesApiTest do
       conn = post(conn, ~p"/api/notify", %{})
       assert json_response(conn, 400)
     end
+
+    test "session_id suppression: disabled sessions suppress, enabled deliver", %{conn: conn} do
+      {:ok, _} =
+        Notify.create_destination(%{
+          "name" => "Phone",
+          "channel" => "telegram",
+          "config" => %{"bot_token" => "tok", "chat_id" => "42"},
+          "is_default" => true
+        })
+
+      # Unknown/disabled session -> suppressed, no HTTP call.
+      conn1 = post(conn, ~p"/api/notify", %{"message" => "hi", "session_id" => "muted"})
+      assert json_response(conn1, 200) == %{"status" => "suppressed"}
+      refute_receive {:http, _, _, _}
+
+      # Enabled session -> delivered.
+      :ok = SapoCore.Assistant.SessionNotifications.set_enabled("loud", true)
+      on_exit(fn -> SapoCore.Assistant.SessionNotifications.delete("loud") end)
+
+      conn2 = post(conn, ~p"/api/notify", %{"message" => "hi", "session_id" => "loud"})
+      assert json_response(conn2, 200) == %{"status" => "sent"}
+      assert_receive {:http, :post, _, _}
+    end
   end
 
   describe "notification destinations" do

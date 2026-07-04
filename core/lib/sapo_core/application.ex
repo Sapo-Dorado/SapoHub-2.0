@@ -24,6 +24,10 @@ defmodule SapoCore.Application do
         {Task.Supervisor, name: SapoCore.TaskSupervisor},
         {Finch, name: SapoCore.Finch},
         {SapoCore.Scheduler, hooks: module_hooks()},
+        SapoCore.Assistant.TabStore,
+        {Elixir.Registry, keys: :unique, name: SapoCore.Assistant.SessionRegistry},
+        SapoCore.Assistant.SessionSupervisor,
+        SapoCore.Assistant.SessionNotifications,
         SapoCoreWeb.Endpoint
       ] ++ module_children()
 

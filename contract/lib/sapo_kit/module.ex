@@ -90,6 +90,14 @@ defmodule SapoKit.Module do
   @callback ai_context() :: String.t() | nil
 
   @doc """
+  Markdown fragment injected into the assistant's SYSTEM PROMPT at session
+  start (composed across enabled modules in dependency order), or `nil`.
+  Distinct from `ai_context/0`, which is pull-based via
+  `/api/claude-context`. Keep it short: rules and pointers, not data.
+  """
+  @callback assistant_system_prompt() :: String.t() | nil
+
+  @doc """
   A NimbleOptions-style schema validating this module's Nix-provided config.
   Validated at boot; return `[]` to accept anything.
   """
@@ -138,6 +146,9 @@ defmodule SapoKit.Module do
       def ai_context, do: nil
 
       @impl true
+      def assistant_system_prompt, do: nil
+
+      @impl true
       def config_schema, do: []
 
       defoverridable version: 0,
@@ -150,6 +161,7 @@ defmodule SapoKit.Module do
                      storage_paths: 0,
                      required_secrets: 0,
                      ai_context: 0,
+                     assistant_system_prompt: 0,
                      config_schema: 0
     end
   end

@@ -82,10 +82,18 @@ defmodule SapoCore.Scheduler do
   def handle_info(:tick, state) do
     now = state.now_fun.()
 
+    # A tick must never take the scheduler down (e.g. transient DB errors):
+    # log and try again next tick.
     state =
-      state
-      |> tick_hooks(now)
-      |> tick_actions(now)
+      try do
+        state
+        |> tick_hooks(now)
+        |> tick_actions(now)
+      rescue
+        e ->
+          Logger.error("scheduler tick failed: #{Exception.format(:error, e, __STACKTRACE__)}")
+          state
+      end
 
     schedule_tick(state, state.tick_ms)
     {:noreply, state}

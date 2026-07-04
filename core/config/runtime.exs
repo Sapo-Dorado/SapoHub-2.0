@@ -41,6 +41,14 @@ if config_env() == :prod do
 
   config :sapo_core, storage_root: storage_root
 
+  # Assistant session working directory (nix option assistant.workDir).
+  if workdir = System.get_env("ASSISTANT_WORKDIR") do
+    config :sapo_core, assistant_workdir: workdir
+  end
+
+  # Whether assistant sessions get --chrome (nix option assistant.browser.enable).
+  config :sapo_core, assistant_chrome: System.get_env("ASSISTANT_CHROME") == "true"
+
   # Core secrets validated as hard boot requirements by SapoCore.Secrets.
   # SECRET_KEY_BASE / DATABASE_PATH already raise above; list any further
   # core-owned env vars here.
