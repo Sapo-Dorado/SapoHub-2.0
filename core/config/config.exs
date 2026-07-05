@@ -32,9 +32,11 @@ config :sapo_core, SapoCoreWeb.Endpoint,
   pubsub_server: SapoCore.PubSub,
   live_view: [signing_salt: "ARtpRdLN"]
 
-# Configure esbuild (the version is required)
+# Configure esbuild (the version is required). ESBUILD_PATH (set by the
+# nix devshell/release build) points at a nix-built binary; unset = download.
 config :esbuild,
   version: "0.25.4",
+  path: System.get_env("ESBUILD_PATH"),
   sapo_core: [
     args:
       ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=.),

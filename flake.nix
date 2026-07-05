@@ -14,10 +14,58 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in
     {
-      # M6 will add:
-      #   lib.mkSapoHub       - compose enabled modules into a release (nix/compose.nix)
-      #   nixosModules.default - services.sapohub (nix/nixos-module.nix)
-      #   packages.default     - CI smoke build with the core module set
+      # ── Composition API ────────────────────────────────────────────────────
+      # User configs call lib.mkSapoHub to build the release + CLI for their
+      # module set, then import nixosModules.default and set services.sapohub.
+      lib.mkSapoHub = { system, modules, depsHash, npmDepsHash, apiBase ? "http://localhost:4000/api" }:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          toolsPkgs = nixpkgs-tools.legacyPackages.${system};
+          beamPkgs = pkgs.beam.packages.erlang_27;
+          compose = import ./nix/compose.nix {
+            inherit pkgs beamPkgs;
+            lib = nixpkgs.lib;
+            elixir = beamPkgs.elixir_1_18;
+            tailwind = toolsPkgs.tailwindcss_4;
+          };
+          mkCli = import ./nix/cli.nix { inherit pkgs; lib = nixpkgs.lib; };
+        in {
+          package = compose {
+            src = self;
+            inherit modules depsHash npmDepsHash;
+          };
+          cli = mkCli { src = self; inherit modules apiBase; };
+        };
+
+      # In-repo module packaging attrsets (external modules export the same
+      # shape as `sapohubModule` from their own flakes).
+      sapohubModules = {
+        hello = {
+          name = "hello";
+          app = "sapo_hello";
+          src = ./modules/hello;
+          elixirModule = "SapoHello.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = false;
+        };
+      };
+
+      nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
+
+      # CI smoke build: core + the hello reference module.
+      packages = forAllSystems (system:
+        let
+          built = self.lib.mkSapoHub {
+            inherit system;
+            modules = [ self.sapohubModules.hello ];
+            depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
+            npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
+          };
+        in {
+          default = built.package;
+          cli = built.cli;
+        });
 
       devShells = forAllSystems (system:
         let
@@ -51,6 +99,7 @@
               # binary the `mix tailwind` installer downloads (segfaults after
               # patchelf; Bun-compiled binaries don't tolerate it).
               export TAILWIND_PATH="${toolsPkgs.tailwindcss_4}/bin/tailwindcss"
+              export ESBUILD_PATH="${pkgs.esbuild}/bin/esbuild"
 
               # The expty precompiled NIF ships a spawn-helper binary linked
               # against the generic /lib64 dynamic linker, which does not
