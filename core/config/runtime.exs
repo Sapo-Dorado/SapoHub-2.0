@@ -67,6 +67,12 @@ if config_env() == :prod do
   # AI context can embed `sapo --help`.
   config :sapo_core, sapo_cli_path: System.get_env("SAPO_CLI_PATH")
 
+  # UI prefs: nix-declared base + instantly-editable local overlay
+  # (synced back into the config repo by sapohub-deploy).
+  config :sapo_core,
+    prefs_base: System.get_env("PREFS_BASE"),
+    prefs_overlay: System.get_env("PREFS_OVERLAY") || Path.join(state_dir, "prefs-overlay.json")
+
   # Core secrets validated as hard boot requirements by SapoCore.Secrets.
   # SECRET_KEY_BASE / DATABASE_PATH already raise above; list any further
   # core-owned env vars here.

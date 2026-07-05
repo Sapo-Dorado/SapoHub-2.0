@@ -85,6 +85,22 @@ in
       description = "Extra notes for AI agents, one per line (AI context).";
     };
 
+    prefs = mkOption {
+      type = types.attrsOf (types.either types.str types.bool);
+      default = { };
+      example = {
+        "dashboard_button.my_plate" = "status";
+        "statusline.core.snapshot" = false;
+      };
+      description = ''
+        UI preferences (dashboard button variants, statusline toggles).
+        Usually you don't write these by hand: Settings-page edits apply
+        instantly via a local overlay, and the next deploy renders them
+        into sapohub-prefs.nix in your config repo (lib.mkDefault, so
+        anything set here directly wins).
+      '';
+    };
+
     assistant = {
       workDir = mkOption {
         type = types.nullOr types.str;
@@ -146,6 +162,9 @@ in
 
       environment.systemPackages = [ cfg.cliPackage deployScript ];
 
+      # Nix-declared prefs base; the app overlays local UI edits on top.
+      environment.etc."sapohub/prefs.json".text = builtins.toJSON cfg.prefs;
+
       systemd.services.sapohub = {
         description = "SapoHub 2.0";
         wantedBy = [ "multi-user.target" ];
@@ -163,6 +182,8 @@ in
           ASSISTANT_CHROME = if cfg.assistant.browser.enable then "true" else "false";
           AGENT_NOTES = cfg.agentNotes;
           SAPO_CLI_PATH = "${cfg.cliPackage}/bin/sapo";
+          PREFS_BASE = "/etc/sapohub/prefs.json";
+          PREFS_OVERLAY = "${cfg.stateDir}/db/prefs-overlay.json";
           SAPO_API_BASE = "${baseUrl}/api";
           RELEASE_TMP = "${cfg.stateDir}/tmp";
           LANG = "en_US.UTF-8";

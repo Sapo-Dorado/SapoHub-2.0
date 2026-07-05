@@ -49,7 +49,10 @@ Only `id/0` and `title/0` are required; everything else has a no-op default.
 | `id()` | — | Unique atom, e.g. `:my_thing`. Config key + table-name prefix. |
 | `title()` | — | Human name for UI + snapshot manifest. |
 | `version()` | app vsn | Recorded in snapshot manifests. |
-| `dashboard_tile(config)` | `nil` | Dashboard entry (being reworked into `dashboard_buttons` — see UI plan). |
+| `icon()` | generic | Heroicon name for the default dashboard button. |
+| `dashboard_buttons(config)` | `[]` | Extra dashboard button VARIANTS (LiveComponents in the fixed-size slot). The default icon+title button is free; the user picks the variant in Settings. |
+| `statusline_items(config)` | `[]` | `%SapoKit.StatuslineItem{}` segments for the global statusline (text/level fns + PubSub `topics` for live updates). User-toggleable. |
+| `settings_component()` | `nil` | LiveComponent rendered as your own tab on the Settings page. |
 | `ui_routes()` | `[]` | LiveView routes, absolute paths (`/my-thing`). Mounted in the ONE shared `live_session` (use `<.link navigate>`). |
 | `api_routes()` | `[]` | JSON routes relative to `/api`. |
 | `migrations_path()` | `priv/migrations` | Run at boot/deploy together with core's. |
@@ -58,7 +61,11 @@ Only `id/0` and `title/0` are required; everything else has a no-op default.
 | `storage_paths()` | `[]` | **Storage opt-in.** `[]` = no storage dir. Non-empty = dedicated dir + these subdirs (`["."]` = just the dir). |
 | `required_secrets()` | `[]` | Env var names; missing ones warn at boot + show in Settings. Degrade gracefully. |
 | `ai_context()` | `nil` | Markdown fragment for `/api/claude-context`; embed your own live counts. |
+| `assistant_system_prompt()` | `nil` | Short fragment appended to the assistant's system prompt at session start (rules/pointers, not data). |
 | `config_schema()` | `[]` | NimbleOptions schema; nix-provided config is validated against it at boot (fail fast). |
+
+Runtime config access outside callback arguments (contexts, hooks):
+`SapoKit.ModuleConfig.get(:my_thing, :some_key)`.
 
 Route rules: core reserves UI paths `/`, `/settings`, `/assistant` and API
 paths `/claude-context`, `/snapshot`, `/notify`,

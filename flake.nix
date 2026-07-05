@@ -76,6 +76,78 @@
           cli = built.cli;
         });
 
+      # NixOS VM test (needs KVM; run via `nix build .#checks.x86_64-linux.vm`):
+      # service boots + serves the API, exactly ONE sudo command, composed
+      # CLI works against the live hub.
+      checks.x86_64-linux =
+        let
+          system = "x86_64-linux";
+          pkgs = nixpkgs.legacyPackages.${system};
+          built = self.lib.mkSapoHub {
+            inherit system;
+            modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
+            depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
+            npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
+          };
+        in
+        {
+          vm = pkgs.testers.runNixOSTest {
+            name = "sapohub";
+
+            nodes.machine = { pkgs, ... }: {
+              imports = [ self.nixosModules.default ];
+
+              virtualisation.memorySize = 2048;
+              virtualisation.diskSize = 4096;
+
+              environment.etc."sapohub-secrets.env".text = ''
+                SECRET_KEY_BASE=vm-test-secret-key-base-vm-test-secret-key-base-vm-test-secret-1
+              '';
+
+              services.sapohub = {
+                enable = true;
+                package = built.package;
+                cliPackage = built.cli;
+                host = "localhost";
+                port = 4000;
+                secretsFile = "/etc/sapohub-secrets.env";
+                # Real claude-code is unfree; the VM only needs the PATH
+                # wiring, not a working assistant.
+                assistant.claudePackage =
+                  pkgs.writeShellScriptBin "claude" "echo claude-stub";
+                deploy = {
+                  flakePath = "/tmp/hub-config";
+                  flakeAttr = "hub";
+                };
+              };
+            };
+
+            testScript = ''
+              machine.start()
+              machine.wait_for_unit("sapohub.service")
+              machine.wait_for_open_port(4000)
+
+              # API up, context served, modules present.
+              ctx = machine.succeed("curl -sf http://localhost:4000/api/claude-context")
+              assert "SapoHub" in ctx and "my_plate" in ctx
+
+              # Restricted sudo: EXACTLY one NOPASSWD command.
+              rules = machine.succeed("sudo -l -U sapohub")
+              assert "sapohub-deploy" in rules
+              assert rules.count("NOPASSWD") == 1
+
+              # Composed CLI round-trips against the live hub.
+              machine.succeed("sapo tasks create vm-task --priority high")
+              out = machine.succeed("sapo tasks list")
+              assert "vm-task" in out
+
+              # Snapshot save via CLI, file lands in the state dir.
+              machine.succeed("sapo snapshot save")
+              machine.succeed("ls /var/lib/sapohub/snapshots/ | grep -q sapohub-")
+            '';
+          };
+        };
+
       devShells = forAllSystems (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
