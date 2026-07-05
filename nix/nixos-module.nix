@@ -186,6 +186,9 @@ in
           PREFS_OVERLAY = "${cfg.stateDir}/db/prefs-overlay.json";
           SAPO_API_BASE = "${baseUrl}/api";
           RELEASE_TMP = "${cfg.stateDir}/tmp";
+          # The release store path is read-only; supply the node cookie
+          # directly (single-node, value is irrelevant).
+          RELEASE_COOKIE = "sapohub";
           LANG = "en_US.UTF-8";
           # claude (SIGCHLD-fixed) first on PATH for assistant sessions.
           PATH = lib.mkForce
