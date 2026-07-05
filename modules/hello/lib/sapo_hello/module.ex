@@ -39,6 +39,12 @@ defmodule SapoHello.Module do
     ]
   end
 
+  @impl true
+  def icon, do: "hero-hand-raised"
+
+  @impl true
+  def settings_component, do: SapoHelloWeb.SettingsComponent
+
   # Storage is opt-in: returning a non-empty list gives this module a
   # dedicated directory (["."] = just the directory, no subdirs).
   @impl true

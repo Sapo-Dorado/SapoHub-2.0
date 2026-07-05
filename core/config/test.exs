@@ -34,3 +34,5 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+config :sapo_core, prefs_overlay: Path.expand("../tmp/prefs_overlay_test.json", __DIR__)

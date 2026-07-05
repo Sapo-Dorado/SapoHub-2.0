@@ -20,6 +20,38 @@ defmodule MyPlate.Module do
   end
 
   @impl true
+  def icon, do: "hero-clipboard-document-list"
+
+  @impl true
+  def dashboard_buttons(_config) do
+    [
+      %SapoKit.DashboardButton{
+        id: "status",
+        label: "status — active & due counts",
+        component: MyPlateWeb.StatusButton
+      }
+    ]
+  end
+
+  @impl true
+  def statusline_items(_config) do
+    [
+      %SapoKit.StatuslineItem{
+        id: "my_plate.due",
+        label: "Tasks due",
+        text: fn ->
+          case MyPlate.count_due_today() do
+            0 -> "0 due"
+            n -> "#{n} due"
+          end
+        end,
+        level: fn -> if MyPlate.count_due_today() > 0, do: :warn, else: :ok end,
+        topics: ["my_plate:tasks"]
+      }
+    ]
+  end
+
+  @impl true
   def ui_routes do
     [%{path: "/my-plate", live_view: MyPlateWeb.Live.Index, action: :index}]
   end

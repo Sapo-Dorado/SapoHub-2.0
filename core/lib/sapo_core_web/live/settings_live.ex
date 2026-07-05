@@ -10,6 +10,8 @@ defmodule SapoCoreWeb.SettingsLive do
 
   use SapoCoreWeb, :live_view
 
+  import SapoCoreWeb.Statusline
+
   require Logger
 
   alias SapoCore.Assistant.CommandSession
@@ -25,6 +27,13 @@ defmodule SapoCoreWeb.SettingsLive do
       Phoenix.PubSub.subscribe(SapoCore.PubSub, "session:#{@deploy_session}")
     end
 
+    module_tabs =
+      for mod <- Registry.modules(),
+          component = mod.settings_component(),
+          not is_nil(component) do
+        %{id: to_string(mod.id()), title: String.downcase(mod.title()), component: component}
+      end
+
     {:ok,
      assign(socket,
        page_title: "settings",
@@ -33,14 +42,63 @@ defmodule SapoCoreWeb.SettingsLive do
        secrets: SapoCore.Secrets.status(),
        modules:
          Enum.map(Registry.modules(), &%{id: &1.id(), title: &1.title(), version: &1.version()}),
+       module_tabs: module_tabs,
+       active_tab: "hub",
+       button_choices: button_choices(),
+       statusline_options: statusline_options(),
        saving: false,
        deploy_running: CommandSession.alive?(@deploy_session)
      )}
   end
 
-  # ── Snapshot ───────────────────────────────────────────────────────────────
+  defp button_choices do
+    for mod <- Registry.modules(), mod.ui_routes() != [] do
+      options =
+        [%{id: "default", label: "default — icon + name"}] ++
+          Enum.map(
+            mod.dashboard_buttons(Registry.config_for(mod)),
+            &%{id: &1.id, label: &1.label}
+          )
+
+      %{
+        module_id: to_string(mod.id()),
+        title: String.downcase(mod.title()),
+        options: options,
+        selected: SapoCore.Prefs.get("dashboard_button.#{mod.id()}", "default")
+      }
+    end
+  end
+
+  defp statusline_options do
+    for item <- SapoCore.Statusline.all_items() do
+      %{
+        id: item.id,
+        label: item.label,
+        enabled: SapoCore.Prefs.get("statusline.#{item.id}", true)
+      }
+    end
+  end
+
+  # ── Tabs & prefs ───────────────────────────────────────────────────────────
 
   @impl true
+  def handle_event("switch_settings_tab", %{"tab" => tab}, socket) do
+    {:noreply, assign(socket, active_tab: tab)}
+  end
+
+  def handle_event("set_dashboard_button", %{"module" => module_id, "variant" => variant}, socket) do
+    :ok = SapoCore.Prefs.put("dashboard_button.#{module_id}", variant)
+    {:noreply, assign(socket, button_choices: button_choices())}
+  end
+
+  def handle_event("toggle_statusline_item", %{"id" => id}, socket) do
+    current = SapoCore.Prefs.get("statusline.#{id}", true)
+    :ok = SapoCore.Prefs.put("statusline.#{id}", !current)
+    {:noreply, assign(socket, statusline_options: statusline_options())}
+  end
+
+  # ── Snapshot ───────────────────────────────────────────────────────────────
+
   def handle_event("save_data", _params, socket) do
     live_view = self()
 
@@ -126,18 +184,36 @@ defmodule SapoCoreWeb.SettingsLive do
   def render(assigns) do
     ~H"""
     <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
-      <nav class="flex items-center h-[38px] px-4 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs">
-        <.link navigate={~p"/"} class="text-[#7FB069] font-semibold">sapohub</.link>
-        <span class="text-[#86948F] px-2">/</span>
-        <span>settings</span>
-      </nav>
+      <.statusline crumb="settings" items={@statusline} />
 
-      <div class="flex items-center gap-2 px-3 py-2 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs">
-        <span class="px-3 py-[5px] rounded-[3px] bg-[#0D1113] border border-[#242D31]">hub</span>
-        <%!-- module settings tabs land with the settings_component() callback --%>
+      <div class="flex items-center gap-2 px-3 py-2 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs overflow-x-auto">
+        <button
+          :for={tab <- [%{id: "hub", title: "hub"} | @module_tabs]}
+          phx-click="switch_settings_tab"
+          phx-value-tab={tab.id}
+          class={[
+            "px-3 py-[5px] rounded-[3px] whitespace-nowrap",
+            if(tab.id == @active_tab,
+              do: "bg-[#0D1113] border border-[#242D31] text-[#E6ECE9]",
+              else: "border border-transparent text-[#86948F] hover:text-[#E6ECE9]"
+            )
+          ]}
+        >
+          {tab.title}
+        </button>
       </div>
 
-      <main class="max-w-[980px] mx-auto px-4 py-8 space-y-9">
+      <main :if={@active_tab != "hub"} class="max-w-[980px] mx-auto px-4 py-8">
+        <.live_component
+          :for={tab <- @module_tabs}
+          :if={tab.id == @active_tab}
+          module={tab.component}
+          id={"settings-#{tab.id}"}
+          module_id={tab.id}
+        />
+      </main>
+
+      <main :if={@active_tab == "hub"} class="max-w-[980px] mx-auto px-4 py-8 space-y-9">
         <Layouts.flash_group flash={@flash} />
 
         <section>
@@ -195,6 +271,61 @@ defmodule SapoCoreWeb.SettingsLive do
               class="w-full h-[320px] bg-[#0D1113] border border-[#242D31] rounded-[4px] overflow-hidden"
             >
             </div>
+          </div>
+        </section>
+
+        <section>
+          <.eyebrow>Dashboard buttons</.eyebrow>
+          <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
+            <table class="w-full text-[13.5px]">
+              <tr :for={choice <- @button_choices} class="border-t first:border-t-0 border-[#242D31]">
+                <td class="px-4 py-2.5 font-mono text-[12.5px]">{choice.module_id}</td>
+                <td class="px-4 py-2.5">
+                  <form phx-change="set_dashboard_button">
+                    <input type="hidden" name="module" value={choice.module_id} />
+                    <select
+                      name="variant"
+                      class="bg-[#0D1113] border border-[#242D31] rounded-[3px] font-mono text-[12px] text-[#86948F] px-2 py-1 focus:border-[#7FB069] focus:outline-none"
+                    >
+                      <option
+                        :for={opt <- choice.options}
+                        value={opt.id}
+                        selected={opt.id == choice.selected}
+                      >
+                        {opt.label}
+                      </option>
+                    </select>
+                  </form>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </section>
+
+        <section>
+          <.eyebrow>Statusline</.eyebrow>
+          <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
+            <table class="w-full text-[13.5px]">
+              <tr :for={opt <- @statusline_options} class="border-t first:border-t-0 border-[#242D31]">
+                <td class="px-4 py-2.5 font-mono text-[12.5px]">{opt.id}</td>
+                <td class="px-4 py-2.5 text-[#86948F] hidden sm:table-cell">{opt.label}</td>
+                <td class="px-4 py-2.5 text-right">
+                  <button
+                    phx-click="toggle_statusline_item"
+                    phx-value-id={opt.id}
+                    class={[
+                      "font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border",
+                      if(opt.enabled,
+                        do: "text-[#7FB069] border-[#3C5934]",
+                        else: "text-[#86948F] border-[#242D31]"
+                      )
+                    ]}
+                  >
+                    {if opt.enabled, do: "shown", else: "hidden"}
+                  </button>
+                </td>
+              </tr>
+            </table>
           </div>
         </section>
 

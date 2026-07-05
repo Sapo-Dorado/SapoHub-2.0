@@ -10,6 +10,7 @@ defmodule SapoCoreWeb.AssistantLive do
   use SapoCoreWeb, :live_view
 
   import SapoCoreWeb.ClaudeSession
+  import SapoCoreWeb.Statusline, only: [statusline: 1]
 
   require Logger
 
@@ -256,20 +257,7 @@ defmodule SapoCoreWeb.AssistantLive do
   def render(assigns) do
     ~H"""
     <div class="flex flex-col h-[100dvh] bg-[#0D1113]">
-      <%!-- Statusline-style header (full statusline component lands with the UI pass) --%>
-      <nav class="flex items-center h-[38px] px-4 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs shrink-0">
-        <.link navigate={~p"/"} class="text-[#7FB069] font-semibold">sapohub</.link>
-        <span class="text-[#86948F] px-2">/</span>
-        <span class="text-[#E6ECE9]">assistant</span>
-        <span class="flex-1"></span>
-        <.link
-          navigate={~p"/settings"}
-          aria-label="Settings"
-          class="text-[#86948F] hover:text-[#7FB069]"
-        >
-          ⚙
-        </.link>
-      </nav>
+      <.statusline crumb="assistant" items={@statusline} />
 
       <%!-- Tab bar --%>
       <div class="flex items-center gap-2 px-3 py-2 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs overflow-x-auto shrink-0">

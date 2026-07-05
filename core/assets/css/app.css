@@ -5,6 +5,10 @@
 @source "../css";
 @source "../js";
 @source "../../lib/sapo_core_web";
+/* Util modules ship LiveViews/components too — scan them so their tailwind
+   classes and heroicons land in the build (same relative path in nix
+   releases, where modules are staged next to core). */
+@source "../../../modules";
 
 /* A Tailwind plugin that makes "hero-#{ICON}" classes available.
    The heroicons installation itself is managed by your mix.exs */

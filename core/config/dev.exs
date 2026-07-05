@@ -99,3 +99,6 @@ config :phoenix_live_view,
   debug_attributes: true,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
+
+# UI preference overlay (base comes from nix in production).
+config :sapo_core, prefs_overlay: Path.expand("../tmp/prefs-overlay.json", __DIR__)

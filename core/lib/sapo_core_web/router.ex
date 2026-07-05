@@ -21,7 +21,7 @@ defmodule SapoCoreWeb.Router do
 
     # A single live_session so navigation between core pages and module
     # pages reuses one LiveView websocket (required for <.link navigate>).
-    live_session :default do
+    live_session :default, on_mount: [{SapoCoreWeb.Statusline, :default}] do
       live "/", SapoCoreWeb.DashboardLive, :index
       live "/assistant", SapoCoreWeb.AssistantLive, :index
       live "/settings", SapoCoreWeb.SettingsLive, :index

@@ -29,6 +29,8 @@ defmodule SapoKit.Module do
   (routes) and at boot (children, storage, secrets, config validation).
   """
 
+  alias SapoKit.DashboardButton
+  alias SapoKit.StatuslineItem
   alias SapoKit.Tile
 
   @typedoc "A LiveView route contributed to the shared `live_session`."
@@ -56,7 +58,32 @@ defmodule SapoKit.Module do
   @callback version() :: String.t()
 
   @doc "Dashboard tile, or `nil` for no tile. Receives the module's config map."
+  @deprecated "Superseded by dashboard_buttons/1 (slot model); kept until the tile grid is removed"
   @callback dashboard_tile(config :: map()) :: Tile.t() | nil
+
+  @doc """
+  Icon (heroicon name) for the module's DEFAULT dashboard button.
+  """
+  @callback icon() :: String.t()
+
+  @doc """
+  Additional dashboard button variants (LiveComponents rendered in the
+  module's fixed-size slot). The default icon+title button always exists;
+  the user picks the variant per utility in Settings.
+  """
+  @callback dashboard_buttons(config :: map()) :: [DashboardButton.t()]
+
+  @doc """
+  Optional statusline segments. Only rendered when the user enables them
+  in Settings; re-evaluated on the declared PubSub topics + a refresh tick.
+  """
+  @callback statusline_items(config :: map()) :: [StatuslineItem.t()]
+
+  @doc """
+  Optional `Phoenix.LiveComponent` rendered as this module's own tab on
+  the Settings page, or `nil` for no tab.
+  """
+  @callback settings_component() :: module() | nil
 
   @doc "LiveView routes (absolute paths, e.g. `/my-plate`)."
   @callback ui_routes() :: [ui_route()]
@@ -120,6 +147,18 @@ defmodule SapoKit.Module do
       def dashboard_tile(_config), do: nil
 
       @impl true
+      def icon, do: "hero-squares-2x2"
+
+      @impl true
+      def dashboard_buttons(_config), do: []
+
+      @impl true
+      def statusline_items(_config), do: []
+
+      @impl true
+      def settings_component, do: nil
+
+      @impl true
       def ui_routes, do: []
 
       @impl true
@@ -153,6 +192,10 @@ defmodule SapoKit.Module do
 
       defoverridable version: 0,
                      dashboard_tile: 1,
+                     icon: 0,
+                     dashboard_buttons: 1,
+                     statusline_items: 1,
+                     settings_component: 0,
                      ui_routes: 0,
                      api_routes: 0,
                      migrations_path: 0,

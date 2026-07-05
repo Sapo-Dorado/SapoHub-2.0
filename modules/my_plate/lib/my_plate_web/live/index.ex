@@ -66,13 +66,11 @@ defmodule MyPlateWeb.Live.Index do
   def render(assigns) do
     ~H"""
     <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
-      <nav class="flex items-center h-[38px] px-4 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs">
-        <.link navigate="/" class="text-[#7FB069] font-semibold">sapohub</.link>
-        <span class="text-[#86948F] px-2">/</span>
-        <span>my plate</span>
-        <span class="flex-1"></span>
-        <span class="text-[#86948F]"><span class="text-[#E6ECE9]">{@count}</span> active</span>
-      </nav>
+      <SapoCoreWeb.Statusline.statusline
+        crumb="my plate"
+        items={@statusline}
+        right={"#{@count} active"}
+      />
 
       <main class="max-w-[980px] mx-auto px-4 py-6 space-y-7">
         <form phx-submit="add" class="flex gap-2.5">
