@@ -19,7 +19,8 @@ config :sapo_module_kit,
   notify: SapoCore.Notify,
   http: SapoCore.HTTP,
   storage: SapoCore.Storage,
-  scheduler: SapoCore.Scheduler
+  scheduler: SapoCore.Scheduler,
+  module_config: SapoCore.ModuleConfig
 
 # Configures the endpoint
 config :sapo_core, SapoCoreWeb.Endpoint,

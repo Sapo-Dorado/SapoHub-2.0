@@ -49,16 +49,25 @@
           cliFragment = true;
           jsHooks = false;
         };
+        my_plate = {
+          name = "my_plate";
+          app = "my_plate";
+          src = ./modules/my_plate;
+          elixirModule = "MyPlate.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = false;
+        };
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
 
-      # CI smoke build: core + the hello reference module.
+      # CI smoke build: core + the default module set.
       packages = forAllSystems (system:
         let
           built = self.lib.mkSapoHub {
             inherit system;
-            modules = [ self.sapohubModules.hello ];
+            modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
             depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
             npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
           };

@@ -7,6 +7,12 @@ defmodule SapoCore.ModuleConfig do
 
   alias SapoCore.Generated.Registry
 
+  @doc "A module's config map by id (backs `SapoKit.ModuleConfig`)."
+  @spec fetch(atom()) :: map()
+  def fetch(module_id) when is_atom(module_id) do
+    Map.get(Registry.module_config(), module_id, %{})
+  end
+
   @doc "Validate every enabled module's config. Returns `:ok` or raises."
   @spec validate!([module()], %{atom() => map()}) :: :ok
   def validate!(modules \\ Registry.modules(), config \\ Registry.module_config()) do

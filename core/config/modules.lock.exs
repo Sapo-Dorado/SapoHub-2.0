@@ -5,5 +5,6 @@
 # build, Nix generates this file (pointing at /nix/store paths) together
 # with lib/sapo_core/generated/registry.ex — the two must stay in sync.
 [
-  {:sapo_hello, "../../modules/hello"}
+  {:sapo_hello, "../../modules/hello"},
+  {:my_plate, "../../modules/my_plate"}
 ]
