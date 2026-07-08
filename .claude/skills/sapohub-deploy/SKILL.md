@@ -39,12 +39,30 @@ guess here is expensive to undo.
 
 ## Path 1: fresh machine (nixos-anywhere)
 
-Entry point: `./scripts/bootstrap.sh <ip> [options]` from the repo root.
+Entry point: `./scripts/bootstrap.sh <ip> --hostname <name> [options]`.
+`--hostname` is required — it's both the `nixosConfigurations` attribute
+built and the prefix for that machine's generated hardware files
+(`hardware/<hostname>-hardware-configuration.nix`,
+`hardware/<hostname>-disk-device.nix`), which is what lets one config
+repo manage several distinct hosts over time (`lib.mkFreshMachine` in
+SapoHub-2.0's flake.nix, `hosts` attrset in a personal config repo like
+`sapohub-config`) without one host's hardware config clobbering
+another's. Reuse the same `--hostname` for every future
+bootstrap/rebuild of a given machine; pick a new one for a different
+machine.
+
+Pass `--flake-path <path>` to target a personal config repo instead of
+SapoHub-2.0's own bundled `fresh-machine` example (default: this
+script's own repo) — that's the normal case once someone has their own
+config repo (see `examples/README.md`).
+
 Read the script itself (`scripts/bootstrap.sh`) before running it — it's
 short, heavily commented, and the comments explain exactly what each
 step does and why (hardware-config generation, disk device override,
-secrets seeding via `--extra-files`, the post-install git clone that
-seeds `/etc/sapohub-config` for future redeploys).
+secrets seeding via `--extra-files`, committing+pushing the generated
+hardware files into `--flake-path` so future redeploys have the real
+config rather than a placeholder, the post-install git clone that seeds
+`/etc/sapohub-config` on the target).
 
 Preconditions to check with the user before running it:
 1. The target is reachable over SSH as root right now (`ssh root@<ip>
@@ -65,13 +83,16 @@ The script asks for IP re-confirmation immediately before the
 destructive nixos-anywhere run — don't route around that by scripting
 the confirmation input; let the user actually see and confirm it.
 
-**Customizing the fresh-machine target itself** (module selection,
+**Customizing a fresh-machine target** (module selection,
 `agentNotes`, `assistant.browser.enable`, etc.) means editing the
-`nixosConfigurations.fresh-machine` block directly in the repo's root
-`flake.nix` before running bootstrap.sh — it's the same
-`services.sapohub = { ... }` shape documented in "Customizing an
-install" below. If the user wants a fresh machine with a NON-default
-module set or options, edit that block first.
+`sapohub.lib.mkFreshMachine { ... }` call for that host — either
+SapoHub-2.0's own `nixosConfigurations.fresh-machine` block, or (the
+normal case) the `hosts`/`mkHost` setup in a personal config repo like
+`sapohub-config`, which has one call per hostname and a place to pass
+`extraNixosModules` for anything `mkFreshMachine` doesn't take directly
+(e.g. a `sapohub-prefs.nix` import). Read `lib.mkFreshMachine`'s
+definition in SapoHub-2.0's root `flake.nix` for the current parameter
+list rather than assuming it hasn't changed.
 
 If nixos-anywhere fails partway through (common: SSH key issues, wrong
 disk device, target not actually in an installer environment), it's
