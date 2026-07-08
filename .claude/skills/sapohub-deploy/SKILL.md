@@ -221,14 +221,18 @@ As of this writing, the pieces worth knowing:
   default; turns on `services.tailscale`, `trustedInterfaces`, and a
   first-boot `tailscale-autoconnect` unit. `lib.mkFreshMachine` sets
   this for you; on an existing config it's opt-in (see Path 2 above).
-- **nginx** (`nginx.enable`): off by default; a bare `services.nginx.enable
-  = true` — no virtualHosts wired up yet. Exists as the prerequisite for
+- **nginx** (`nginx.enable`): **on by default** — nginx listens on port
+  80 and proxies `/` to the app's own port on 127.0.0.1
+  (`proxyWebsockets = true`, needed for LiveView). The app still binds
+  its port directly too; nginx just adds a no-port-in-the-URL path
+  (`http://<host>` instead of `http://<host>:4000`). Set
+  `nginx.enable = false;` to skip it. This is also the prerequisite for
   an upcoming dev-session proxy slots feature (mirroring sapo-hub v1's
   `SapoHub.DevSessions`/`devSlots*` pattern — fixed nginx-fronted
   external ports mapped to internal ports a dev server binds to, so
-  `sapo dev create`-style tunnels work against a SapoHub 2.0 box too).
-  Not implemented yet; enabling this today just runs nginx with nothing
-  proxying through it.
+  `sapo dev create`-style tunnels work against a SapoHub 2.0 box too) —
+  not implemented yet, but will live in this same `services.nginx`
+  config once it lands.
 - **Assistant** (`assistant.claudePackage`, `assistant.workDir`,
   `assistant.browser.enable`): `claudePackage` needs the unfree
   `claude-code-nix` overlay applied to the `pkgs` used for that value —

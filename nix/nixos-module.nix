@@ -167,17 +167,22 @@ in
     };
 
     nginx = {
-      enable = mkEnableOption ''
-        nginx on this box. Off by default — SapoHub's own app port is
-        reachable directly over Tailscale, no reverse proxy required for
-        the app itself. This is the prerequisite for the (upcoming)
-        dev-session proxy slots feature (see sapo-hub v1's
-        SapoHub.DevSessions / devSlots* options for the pattern this will
-        follow: fixed nginx-fronted external ports mapped to internal
-        ports dev servers bind to). For now, enabling this just turns on
-        an otherwise-unconfigured `services.nginx` — nothing proxies
-        through it yet.
-      '';
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Run nginx in front of the app, listening on port 80 and
+          proxying to the app's own port on 127.0.0.1 (the app itself is
+          unaffected and still listens directly there too). On by
+          default so the app is reachable at `http://<host>` with no
+          port in the URL. Also the prerequisite for an (upcoming)
+          dev-session proxy slots feature, which will add further
+          nginx-fronted ports here (see sapo-hub v1's
+          SapoHub.DevSessions / devSlots* options for the pattern that'll
+          follow: fixed nginx-fronted external ports mapped to internal
+          ports dev servers bind to).
+        '';
+      };
     };
   };
 
@@ -306,13 +311,24 @@ in
         '';
       };
 
-      # ── Optional: nginx ────────────────────────────────────────────────────
-      # Bare enable for now — no virtualHosts wired up. This exists as the
-      # prerequisite for the upcoming dev-session proxy slots feature; it
-      # doesn't front the main app (which is already reachable directly
-      # over Tailscale) and adds nothing on its own beyond the running
-      # service.
-      services.nginx.enable = mkIf cfg.nginx.enable true;
+      # ── Optional: nginx in front of the app ────────────────────────────────
+      # Listens on 80, proxies to the app's own port on loopback. The app
+      # still binds its own port directly too (unaffected) — this just adds
+      # a no-port-in-the-URL path in over Tailscale, and gives future
+      # dev-session proxy slots a home in the same vhost/service.
+      services.nginx = mkIf cfg.nginx.enable {
+        enable = true;
+        recommendedProxySettings = true;
+        recommendedGzipSettings = true;
+
+        virtualHosts.${cfg.host} = {
+          default = true;
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:${toString cfg.port}";
+            proxyWebsockets = true;
+          };
+        };
+      };
     }
   );
 }

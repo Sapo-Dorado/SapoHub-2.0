@@ -7,8 +7,9 @@ from a wiped/fresh machine or already have a NixOS box you manage.
 
 Use `./scripts/bootstrap.sh <ip>` from the repo root. It targets
 `nixosConfigurations.fresh-machine` in the root `flake.nix` — a
-Tailscale-only host (no public nginx/ACME/firewall) with a disko disk
-layout and `services.sapohub` already wired up. Works on hardware you
+Tailscale-only host (no public ACME/firewall; nginx fronts the app on
+port 80 by default) with a disko disk layout and `services.sapohub`
+already wired up. Works on hardware you
 haven't described to Nix in advance: the script has nixos-anywhere
 generate the target's `hardware-configuration.nix` and figure out the
 disk device for you, rather than requiring you to hand-write either one

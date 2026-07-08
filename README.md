@@ -71,9 +71,11 @@ every future bootstrap/rebuild of THIS machine, and pick a new one for a
 different machine, so multiple hosts can share one config repo without
 clobbering each other's hardware config.
 
-Result is Tailscale-only (no public nginx/ACME/firewall; reachable at
-`http://<tailscale-hostname>:4000` once it joins your tailnet), disko
-disk layout, `services.sapohub` pre-wired. It works on hardware you
+Result is Tailscale-only (no public ACME/firewall; reachable at
+`http://<tailscale-hostname>` once it joins your tailnet — nginx fronts
+the app on port 80 by default, `services.sapohub.nginx.enable`; the app
+itself still listens directly on `:4000` too), disko disk layout,
+`services.sapohub` pre-wired. It works on hardware you
 haven't described to Nix in advance: nixos-anywhere SSHes into the
 target, runs `nixos-generate-config` there, and copies the result back
 locally before building — you don't hand-write a hardware config or know

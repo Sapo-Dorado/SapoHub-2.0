@@ -189,8 +189,9 @@
 
       # ── Fresh-machine bootstrap target (nixos-anywhere) ─────────────────────
       # scripts/bootstrap.sh <ip> --hostname fresh-machine targets this by
-      # default. It's Tailscale-only by design — no public nginx/ACME/
-      # firewall, matching how SapoHub is actually meant to be reached (see
+      # default. It's Tailscale-only by design — no public ACME/firewall
+      # (nginx fronts the app on port 80 by default, services.sapohub.nginx),
+      # matching how SapoHub is actually meant to be reached (see
       # README's "Fresh machine" section). CHANGE sshKey below for your own
       # deploy — or better, don't deploy against THIS repo's own example at
       # all: point --flake-path at a personal config repo that calls
