@@ -20,11 +20,11 @@ contract/    :sapo_module_kit — the module contract + SapoKit.* facades
 core/        :sapo_core — the Phoenix app (dashboard, assistant, settings,
              scheduler, notify, storage, snapshots, AI context, CLI core)
 modules/     in-repo utility modules (hello = reference, my_plate = tasks)
-nix/         compose.nix, cli.nix, nixos-module.nix, deploy-script.nix,
-             disko-config.nix — fresh-machine disk layout
+nix/         compose.nix, cli.nix, nixos-module.nix, deploy-script.nix
 hardware/    example-hardware-configuration.nix, example-disk-device.nix —
-             fallback placeholders; scripts/bootstrap.sh generates the real
-             per-machine versions (gitignored) at deploy time
+             fallback placeholders; scripts/bootstrap.sh generates
+             hardware/<hostname>-{hardware-configuration,disk-device}.nix
+             per machine and commits them (see lib.mkFreshMachine)
 scripts/     bootstrap.sh — fresh-machine deploy via nixos-anywhere
 examples/    user-config/flake.nix — splice SapoHub into an EXISTING config
 docs/        module-authoring.md — how to build a utility module
@@ -57,20 +57,35 @@ willing to wipe) that's reachable over SSH as root, booted into any
 NixOS-based environment (the official installer ISO works fine):
 
 ```sh
-./scripts/bootstrap.sh <ip>
+./scripts/bootstrap.sh <ip> --hostname <name>
 ```
 
-This targets `nixosConfigurations.fresh-machine` in the root `flake.nix`
-— Tailscale-only (no public nginx/ACME/firewall; reachable at
+`--hostname` is required and matters beyond naming: it's both the
+`nixosConfigurations` attribute built (this repo's own `fresh-machine`
+example by default — pass `--flake-path` to target a personal config
+repo instead, see `examples/README.md`) and the prefix for that specific
+machine's generated hardware files
+(`hardware/<hostname>-hardware-configuration.nix`,
+`hardware/<hostname>-disk-device.nix`) — reuse the same `--hostname` on
+every future bootstrap/rebuild of THIS machine, and pick a new one for a
+different machine, so multiple hosts can share one config repo without
+clobbering each other's hardware config.
+
+Result is Tailscale-only (no public nginx/ACME/firewall; reachable at
 `http://<tailscale-hostname>:4000` once it joins your tailnet), disko
 disk layout, `services.sapohub` pre-wired. It works on hardware you
 haven't described to Nix in advance: nixos-anywhere SSHes into the
 target, runs `nixos-generate-config` there, and copies the result back
-locally (`hardware/generated-hardware-configuration.nix`) before
-building — you don't hand-write a hardware config or know the exact
-kernel modules up front. You do need to know (or check via
+locally before building — you don't hand-write a hardware config or know
+the exact kernel modules up front. You do need to know (or check via
 `ssh root@<ip> lsblk`) which block device to partition; pass it with
 `--disk /dev/whatever` if it isn't `/dev/sda`.
+
+The script commits (and pushes, unless you pass `--no-commit`) the
+generated hardware files into the config repo right after a successful
+install — without that, only your local disk would have the real
+hardware config, and the target's own checkout (seeded next, for future
+redeploys) would silently fall back to the generic placeholder.
 
 **Secrets**: by default the script generates a fresh `SECRET_KEY_BASE`
 and seeds it onto the target via nixos-anywhere's `--extra-files`

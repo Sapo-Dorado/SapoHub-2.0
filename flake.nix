@@ -46,73 +46,76 @@
           cli = mkCli { src = self; inherit modules apiBase; };
         };
 
-      # In-repo module packaging attrsets (external modules export the same
-      # shape as `sapohubModule` from their own flakes).
-      sapohubModules = {
-        hello = {
-          name = "hello";
-          app = "sapo_hello";
-          src = ./modules/hello;
-          elixirModule = "SapoHello.Module";
-          config = { };
-          cliFragment = true;
-          jsHooks = false;
-        };
-        my_plate = {
-          name = "my_plate";
-          app = "my_plate";
-          src = ./modules/my_plate;
-          elixirModule = "MyPlate.Module";
-          config = { };
-          cliFragment = true;
-          jsHooks = true;
-        };
-      };
-
-      nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
-
-      # ── Fresh-machine bootstrap target (nixos-anywhere) ─────────────────────
-      # scripts/bootstrap.sh <ip> targets this. It's Tailscale-only by design —
-      # no public nginx/ACME/firewall, matching how SapoHub is actually meant
-      # to be reached (see README's "Fresh machine" section). Works on
-      # arbitrary hardware: the disk device (nix/disko-config.nix) and the
-      # hardware-configuration.nix (imported below) are both generated
-      # per-machine by the bootstrap script via nixos-anywhere's
-      # --generate-hardware-config, not hardcoded here. CHANGE the sshKey /
-      # tailscaleAuthKeyFile / secretsFile below for your own deploy — or
-      # better, copy this whole block into your own flake and start from
-      # there (see the "existing config" example under examples/ for how to
-      # fold nixosModules.default into a config you already own instead).
-      nixosConfigurations.fresh-machine =
+      # ── Fresh-machine (nixos-anywhere) host builder ─────────────────────────
+      # One nixosSystem per physical/virtual machine you bootstrap. Convention:
+      # the nixosConfigurations attribute name IS the hostname IS the prefix
+      # for that host's generated hardware files — `hardware/<hostname>-
+      # hardware-configuration.nix` / `hardware/<hostname>-disk-device.nix` —
+      # so ANY config repo (this one's own `fresh-machine` example, or a
+      # user's personal config repo) can bootstrap multiple distinct hosts
+      # from the same flake without one overwriting another's hardware config.
+      # scripts/bootstrap.sh writes those files (via nixos-anywhere's
+      # --generate-hardware-config) and commits them into whichever repo
+      # --flake-path points at — see that script for the full mechanism.
+      #
+      # hardwareDir MUST be a path from the CALLING flake (typically
+      # `./hardware` in whatever repo defines nixosConfigurations.<hostname>),
+      # not from this one — hardware config is per-repo, not shipped here.
+      lib.mkFreshMachine =
+        { hostname
+        , hardwareDir
+        , sshKey
+        , modules
+        , depsHash
+        , npmDepsHash
+        , system ? "x86_64-linux"
+        , secretsFile ? "/etc/sapohub/secrets.env"
+        , tailscaleAuthKeyFile ? "/etc/sapohub/tailscale-authkey"
+        , deployFlakePath ? "/etc/sapohub-config"
+          # Extra NixOS modules appended after everything below — e.g. a
+          # ./sapohub-prefs.nix import, or per-host overrides. NOT to be
+          # confused with `modules` above (the SapoHub *utility* modules
+          # passed to mkSapoHub, e.g. sapohubModules.my_plate).
+        , extraNixosModules ? [ ]
+        }:
         let
-          system = "x86_64-linux";
-          built = self.lib.mkSapoHub {
-            inherit system;
-            modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
-            depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
-            npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
-          };
+          built = self.lib.mkSapoHub { inherit system modules depsHash npmDepsHash; };
+
+          hwGenerated = hardwareDir + "/${hostname}-hardware-configuration.nix";
+          hwExample = hardwareDir + "/example-hardware-configuration.nix";
+          hardwareConfigPath = if builtins.pathExists hwGenerated then hwGenerated else hwExample;
+
+          diskGenerated = hardwareDir + "/${hostname}-disk-device.nix";
+          diskExample = hardwareDir + "/example-disk-device.nix";
+          diskDeviceFile = if builtins.pathExists diskGenerated then diskGenerated else diskExample;
+          inherit (import diskDeviceFile) sapohubDiskDevice;
         in
         nixpkgs.lib.nixosSystem {
           inherit system;
           modules = [
             disko.nixosModules.disko
-            ./nix/disko-config.nix
             self.nixosModules.default
-            (
-              if builtins.pathExists ./hardware/generated-hardware-configuration.nix
-              then ./hardware/generated-hardware-configuration.nix
-              else ./hardware/example-hardware-configuration.nix
-            )
+            hardwareConfigPath
+            {
+              disko.devices.disk.main = {
+                device = sapohubDiskDevice;
+                type = "disk";
+                content = {
+                  type = "gpt";
+                  partitions = {
+                    boot = { size = "1M"; type = "EF02"; };
+                    swap = { size = "2G"; content.type = "swap"; };
+                    root = {
+                      size = "100%";
+                      content = { type = "filesystem"; format = "ext4"; mountpoint = "/"; };
+                    };
+                  };
+                };
+              };
+            }
 
             ({ pkgs, lib, ... }:
               let
-                sshKey = "ssh-ed25519 AAAA..."; # CHANGE ME — your SSH public key
-                # scripts/bootstrap.sh can seed an authkey file at this path
-                # before first boot (see README) so the machine joins your
-                # tailnet unattended; omit --auth-key-file to skip and run
-                # `tailscale up` by hand after the first boot instead.
-                tailscaleAuthKeyFile = "/etc/sapohub/tailscale-authkey";
                 flakePkgs = import nixpkgs {
                   inherit (pkgs) system;
                   config.allowUnfree = true;
@@ -144,34 +147,74 @@
 
                 # ---- Application ----
                 # Reachable at http://<tailscale-hostname>:4000 once joined —
-                # no domain/TLS needed on a Tailscale-only box. Set `host` to
-                # your actual tailnet hostname once you know it, so
-                # PHX_HOST/URL generation match (cosmetic; doesn't block
-                # first boot).
+                # no domain/TLS needed on a Tailscale-only box.
                 services.sapohub = {
                   enable = true;
                   package = built.package;
                   cliPackage = built.cli;
-                  host = "localhost";
-                  secretsFile = "/etc/sapohub/secrets.env"; # CHANGE ME — seed before bootstrap, see README
+                  inherit secretsFile;
                   assistant.claudePackage = flakePkgs.claude-code;
                   deploy = {
-                    flakePath = "/etc/sapohub-config"; # CHANGE ME — where you'll check out your config repo
-                    flakeAttr = "fresh-machine";
+                    flakePath = deployFlakePath;
+                    flakeAttr = hostname;
                   };
                 };
 
                 nixpkgs.config.allowUnfree = true;
                 environment.systemPackages = [ flakePkgs.claude-code pkgs.google-chrome ];
 
-                networking.hostName = "sapohub";
+                networking.hostName = hostname;
                 boot.loader.grub.enable = true;
                 boot.loader.grub.efiSupport = false;
 
                 system.stateVersion = "24.11";
               })
-          ];
+          ] ++ extraNixosModules;
         };
+
+      # In-repo module packaging attrsets (external modules export the same
+      # shape as `sapohubModule` from their own flakes).
+      sapohubModules = {
+        hello = {
+          name = "hello";
+          app = "sapo_hello";
+          src = ./modules/hello;
+          elixirModule = "SapoHello.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = false;
+        };
+        my_plate = {
+          name = "my_plate";
+          app = "my_plate";
+          src = ./modules/my_plate;
+          elixirModule = "MyPlate.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = true;
+        };
+      };
+
+      nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
+
+      # ── Fresh-machine bootstrap target (nixos-anywhere) ─────────────────────
+      # scripts/bootstrap.sh <ip> --hostname fresh-machine targets this by
+      # default. It's Tailscale-only by design — no public nginx/ACME/
+      # firewall, matching how SapoHub is actually meant to be reached (see
+      # README's "Fresh machine" section). CHANGE sshKey below for your own
+      # deploy — or better, don't deploy against THIS repo's own example at
+      # all: point --flake-path at a personal config repo that calls
+      # `sapohub.lib.mkFreshMachine` itself instead (see examples/README.md
+      # and hardware/README.md for the "existing config" alternative, or
+      # start a personal repo from examples/user-config/).
+      nixosConfigurations.fresh-machine = self.lib.mkFreshMachine {
+        hostname = "fresh-machine";
+        hardwareDir = ./hardware;
+        sshKey = "ssh-ed25519 AAAA..."; # CHANGE ME — your SSH public key
+        modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
+        depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
+        npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
+      };
 
       # CI smoke build: core + the default module set.
       packages = forAllSystems (system:
