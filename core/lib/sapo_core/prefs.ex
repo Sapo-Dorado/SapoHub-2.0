@@ -26,7 +26,12 @@ defmodule SapoCore.Prefs do
   * `"dashboard_order"` → comma-separated slot ids, front to back (see
     `SapoCore.Dashboard`); unset or unrecognized ids fall back to the
     Nix module order with `assistant` last
-  * `"statusline.<item_id>"` → boolean (item enabled)
+  * `"statusline.<item_id>"` → boolean (item enabled); ignored once
+    `"statusline_order"` is set (see below)
+  * `"statusline_order"` → comma-separated item ids, front to back (see
+    `SapoCore.Statusline`); when set, it's the definitive list (only
+    those ids show); unset falls back to natural order filtered by each
+    item's own `"statusline.<item_id>"` toggle
   """
 
   @doc "Effective value for `key` (overlay wins over base, then default)."

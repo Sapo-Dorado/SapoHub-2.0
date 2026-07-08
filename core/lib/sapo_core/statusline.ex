@@ -1,8 +1,15 @@
 defmodule SapoCore.Statusline do
   @moduledoc """
   Collects and evaluates statusline items: core items (scheduler,
-  snapshot age) plus every enabled module's `statusline_items/1`, filtered
-  by user prefs (`statusline.<id>`, default enabled).
+  snapshot age) plus every enabled module's `statusline_items/1`.
+
+  Which items show, and in what order, is controlled by the
+  `"statusline_order"` pref — a comma-separated list of item ids, front
+  to back. When set, it's the definitive list: only those ids show, in
+  that order (any per-item `statusline.<id>` toggle is ignored). When
+  unset (the default), falls back to natural order (core items first,
+  then per-module, in Nix module order), filtered by each item's own
+  `statusline.<id>` toggle (default enabled) — the original behavior.
 
   Evaluation is rescue-guarded so a broken item renders as `--` instead of
   taking the bar down.
@@ -11,7 +18,7 @@ defmodule SapoCore.Statusline do
   alias SapoCore.Generated.Registry
   alias SapoKit.StatuslineItem
 
-  @doc "All offered items (for the Settings toggles)."
+  @doc "All offered items (for the Settings toggles), natural order."
   def all_items do
     core_items() ++
       for mod <- Registry.modules(),
@@ -19,9 +26,20 @@ defmodule SapoCore.Statusline do
           do: item
   end
 
-  @doc "Enabled items only."
+  @doc """
+  Items to actually show, in the configured order. See the moduledoc for
+  the `"statusline_order"` pref / per-item toggle fallback rules.
+  """
   def enabled_items do
-    Enum.filter(all_items(), &SapoCore.Prefs.get("statusline.#{&1.id}", true))
+    case order_ids() do
+      [] -> Enum.filter(all_items(), &SapoCore.Prefs.get("statusline.#{&1.id}", true))
+      ids -> select_ordered(all_items(), ids)
+    end
+  end
+
+  @doc "Persist an explicit order/selection. `ids` may be any mix of atoms/strings."
+  def save_order(ids) do
+    SapoCore.Prefs.put("statusline_order", Enum.map_join(ids, ",", &to_string/1))
   end
 
   @doc "All PubSub topics the enabled items listen on."
@@ -34,6 +52,16 @@ defmodule SapoCore.Statusline do
     for item <- items do
       %{id: item.id, text: safe_text(item), level: safe_level(item)}
     end
+  end
+
+  defp select_ordered(items, ids) do
+    by_id = Map.new(items, &{&1.id, &1})
+    for id <- ids, item = Map.get(by_id, id), not is_nil(item), do: item
+  end
+
+  defp order_ids do
+    SapoCore.Prefs.get("statusline_order", "")
+    |> String.split(",", trim: true)
   end
 
   defp core_items do

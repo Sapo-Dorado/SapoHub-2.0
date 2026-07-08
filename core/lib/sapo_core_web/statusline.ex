@@ -50,6 +50,10 @@ defmodule SapoCoreWeb.Statusline do
     {:halt, refresh(socket)}
   end
 
+  defp handle_info({:pref_changed, "statusline_order", _}, socket) do
+    {:halt, refresh(socket)}
+  end
+
   # Any broadcast on a subscribed item topic re-evaluates the bar, then the
   # message continues to the LiveView's own handle_info.
   defp handle_info(_msg, socket) do
