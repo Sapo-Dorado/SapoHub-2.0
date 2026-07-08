@@ -126,34 +126,24 @@
                 # ---- SSH access ----
                 users.users.root.openssh.authorizedKeys.keys = [ sshKey ];
                 services.openssh.enable = true;
-
-                # ---- Tailscale (the only network path in; no public exposure) ----
-                services.tailscale.enable = true;
-                networking.firewall.trustedInterfaces = [ "tailscale0" ];
                 networking.firewall.allowedTCPPorts = [ 22 ];
-                systemd.services.tailscale-autoconnect = {
-                  description = "Join the tailnet on first boot, if an authkey is present";
-                  after = [ "network-pre.target" "tailscale.service" ];
-                  wants = [ "network-pre.target" "tailscale.service" ];
-                  wantedBy = [ "multi-user.target" ];
-                  serviceConfig.Type = "oneshot";
-                  script = ''
-                    ${pkgs.tailscale}/bin/tailscale status --json 2>/dev/null | ${pkgs.jq}/bin/jq -e '.BackendState == "Running"' >/dev/null && exit 0
-                    if [ -f "${tailscaleAuthKeyFile}" ]; then
-                      ${pkgs.tailscale}/bin/tailscale up --auth-key "file:${tailscaleAuthKeyFile}"
-                    fi
-                  '';
-                };
 
                 # ---- Application ----
                 # Reachable at http://<tailscale-hostname>:4000 once joined —
-                # no domain/TLS needed on a Tailscale-only box.
+                # no domain/TLS needed on a Tailscale-only box. Tailscale
+                # itself (the only network path in; no public exposure) is
+                # services.sapohub.tailscale — same option an existing-config
+                # user can opt into, just defaulted on here.
                 services.sapohub = {
                   enable = true;
                   package = built.package;
                   cliPackage = built.cli;
                   inherit secretsFile;
                   assistant.claudePackage = flakePkgs.claude-code;
+                  tailscale = {
+                    enable = true;
+                    authKeyFile = tailscaleAuthKeyFile;
+                  };
                   deploy = {
                     flakePath = deployFlakePath;
                     flakeAttr = hostname;

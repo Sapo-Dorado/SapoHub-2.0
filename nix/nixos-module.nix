@@ -141,6 +141,30 @@ in
         '';
       };
     };
+
+    tailscale = {
+      enable = mkEnableOption ''
+        Tailscale on this box, plus a first-boot autoconnect unit. Off by
+        default — an existing-config machine keeps whatever networking it
+        already has; opt in explicitly if you want SapoHub to manage this.
+        (lib.mkFreshMachine, the fresh-machine path, turns this on for you.)
+      '';
+
+      authKeyFile = mkOption {
+        type = types.nullOr types.path;
+        default = null;
+        description = ''
+          Path to a file containing a Tailscale auth key (generate one at
+          https://login.tailscale.com/admin/settings/keys). If present at
+          activation, the autoconnect unit joins the tailnet unattended on
+          first boot. If null (or the file doesn't exist yet), Tailscale is
+          still enabled/started — join by hand once with
+          `tailscale up` (prints a URL to approve in a browser). Either way
+          it's a one-time per-machine step; state persists in
+          /var/lib/tailscale across every future rebuild.
+        '';
+      };
+    };
   };
 
   config = mkIf cfg.enable (
@@ -248,6 +272,24 @@ in
           ExecStart = "${pkgs.google-chrome}/bin/google-chrome-stable --user-data-dir=%h/.config/google-chrome --no-first-run --no-default-browser-check --disable-gpu --disable-software-rasterizer ${baseUrl}";
           Restart = "always";
         };
+      };
+
+      # ── Optional: Tailscale + first-boot autoconnect ──────────────────────
+      services.tailscale.enable = mkIf cfg.tailscale.enable true;
+      networking.firewall.trustedInterfaces = mkIf cfg.tailscale.enable [ "tailscale0" ];
+
+      systemd.services.tailscale-autoconnect = mkIf cfg.tailscale.enable {
+        description = "Join the tailnet on first boot, if an authkey is present";
+        after = [ "network-pre.target" "tailscale.service" ];
+        wants = [ "network-pre.target" "tailscale.service" ];
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.Type = "oneshot";
+        script = ''
+          ${pkgs.tailscale}/bin/tailscale status --json 2>/dev/null | ${pkgs.jq}/bin/jq -e '.BackendState == "Running"' >/dev/null && exit 0
+          if [ -n "${toString cfg.tailscale.authKeyFile}" ] && [ -f "${toString cfg.tailscale.authKeyFile}" ]; then
+            ${pkgs.tailscale}/bin/tailscale up --auth-key "file:${toString cfg.tailscale.authKeyFile}"
+          fi
+        '';
       };
     }
   );

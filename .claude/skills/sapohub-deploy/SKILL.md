@@ -79,9 +79,10 @@ Preconditions to check with the user before running it:
    (`--tailscale-auth-key-file`) for unattended tailnet join, or would
    rather run `tailscale up` by hand after bootstrap. This is the one
    genuinely one-time, per-machine manual step even on the fully
-   scripted fresh-machine path — `lib.mkFreshMachine` enables
-   `services.tailscale` and a `tailscale-autoconnect` unit, but joining
-   an ACCOUNT's tailnet needs either an auth key (generate one at
+   scripted fresh-machine path — `lib.mkFreshMachine` sets
+   `services.sapohub.tailscale.enable = true;` (a real module option, see
+   Path 2 below for the non-fresh-machine case), but joining an
+   ACCOUNT's tailnet needs either an auth key (generate one at
    https://login.tailscale.com/admin/settings/keys, save it to a file,
    pass `--tailscale-auth-key-file <path>` — the script seeds it to
    `/etc/sapohub/tailscale-authkey` and the autoconnect unit picks it up
@@ -114,11 +115,19 @@ override files get regenerated fresh on every run.
 
 ## Path 2: existing NixOS config
 
-Networking (Tailscale, firewall) is NOT part of `services.sapohub` — it
-only exists in `lib.mkFreshMachine` (Path 1). An existing machine keeps
-whatever networking it already has; don't add Tailscale config for the
-user unless they ask for it separately, and don't assume it's there if
-it isn't.
+Tailscale IS a real `services.sapohub` option
+(`services.sapohub.tailscale.{enable,authKeyFile}`, in
+`nix/nixos-module.nix`) — `lib.mkFreshMachine` just sets it for you.
+It defaults to **disabled** on an existing-config machine, which keeps
+whatever networking it already has; don't turn it on for the user
+unless they ask for it separately. If they do want it:
+`services.sapohub.tailscale.enable = true;` (+ optionally
+`authKeyFile = "/path/to/authkey";` for unattended join — see the
+Tailscale auth-key precondition above, same mechanism). Everything else
+(firewall `trustedInterfaces`, the `tailscale-autoconnect` unit) is
+handled by the option; nothing else to wire up by hand. General
+firewall/SSH-port config beyond that is still the user's own, untouched
+by this module.
 
 Two ways to do this, in order of preference:
 
@@ -208,6 +217,10 @@ As of this writing, the pieces worth knowing:
 - **Notification destinations**: configured at runtime through the app's
   own Settings UI (Telegram, etc.), not through nix — nothing to set in
   the flake for this.
+- **Tailscale** (`tailscale.enable`, `tailscale.authKeyFile`): off by
+  default; turns on `services.tailscale`, `trustedInterfaces`, and a
+  first-boot `tailscale-autoconnect` unit. `lib.mkFreshMachine` sets
+  this for you; on an existing config it's opt-in (see Path 2 above).
 - **Assistant** (`assistant.claudePackage`, `assistant.workDir`,
   `assistant.browser.enable`): `claudePackage` needs the unfree
   `claude-code-nix` overlay applied to the `pkgs` used for that value —
