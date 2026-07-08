@@ -40,7 +40,11 @@ if config_env() == :prod do
     snapshots_dir: System.get_env("SNAPSHOTS_DIR") || Path.join(state_dir, "snapshots"),
     restore_pending:
       System.get_env("RESTORE_PENDING") || Path.join(state_dir, "restore/pending.tar.gz"),
-    deploy_cmd: {"sudo", [System.get_env("DEPLOY_BIN") || "sapohub-deploy"]}
+    # `--sync-prefs` opts in to writing the local UI-preference overlay back
+    # into the config repo. Only the Settings "Deploy" button should do this
+    # (see nix/deploy-script.nix) — a bare `sudo sapohub-deploy` run by hand
+    # (SSH, cron, whatever) must leave git/nix as the sole source of truth.
+    deploy_cmd: {"sudo", [System.get_env("DEPLOY_BIN") || "sapohub-deploy", "--sync-prefs"]}
 
   storage_root =
     System.get_env("STORAGE_ROOT") ||

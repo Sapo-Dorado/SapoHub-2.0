@@ -46,6 +46,29 @@ defmodule MyPlate do
     |> Repo.all()
   end
 
+  @doc """
+  Active tasks ordered by urgency: soonest due date first (undated tasks
+  last), priority breaking ties. Used by the dashboard preview tile —
+  `list_active_tasks/0` orders by priority alone, for the full task list
+  grouped into priority sections.
+  """
+  def list_tasks_by_urgency do
+    Task
+    |> where([t], t.completed == false)
+    |> Repo.all()
+    |> Enum.sort_by(&urgency_key/1)
+  end
+
+  defp urgency_key(task) do
+    due = if task.due_date, do: Date.to_iso8601(task.due_date), else: "9999-99-99"
+    {due, priority_rank(task.priority)}
+  end
+
+  defp priority_rank("high"), do: 0
+  defp priority_rank("medium"), do: 1
+  defp priority_rank("low"), do: 2
+  defp priority_rank(_), do: 3
+
   def count_active_tasks do
     Repo.aggregate(where(Task, [t], t.completed == false), :count)
   end

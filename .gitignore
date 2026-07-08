@@ -1,6 +1,9 @@
 # Dev-shell local toolchain state
 /.mix/
 /.hex/
+# Unanchored: shellHook derives this from $PWD, which can be repo root or
+# core/ depending on where `nix develop` was invoked from.
+.elixir_make_cache/
 
 # Build artifacts (per mix project)
 **/_build/

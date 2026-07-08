@@ -83,7 +83,7 @@ defmodule MyPlateWeb.Live.Index do
           />
           <button
             type="submit"
-            class="px-[18px] py-[9px] rounded-[4px] bg-[#7FB069] text-[#0C1409] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#8fbf7b]"
+            class="px-[18px] py-[9px] rounded-[4px] bg-[#7FB069] text-[#0C1409] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#8fbf7b] cursor-pointer"
           >
             Add
           </button>
@@ -100,7 +100,7 @@ defmodule MyPlateWeb.Live.Index do
                 phx-click="complete"
                 phx-value-id={task.id}
                 aria-label="Complete task"
-                class="w-[17px] h-[17px] shrink-0 rounded-full border-[1.5px] border-[#86948F] hover:border-[#7FB069]"
+                class="w-[17px] h-[17px] shrink-0 rounded-full border-[1.5px] border-[#86948F] hover:border-[#7FB069] cursor-pointer"
               >
               </button>
               <span class="flex-1 text-sm min-w-0">{task.title}</span>
@@ -118,7 +118,7 @@ defmodule MyPlateWeb.Live.Index do
                 phx-click="delete"
                 phx-value-id={task.id}
                 aria-label="Delete task"
-                class="font-mono text-[#86948F] hover:text-[#E0A458]"
+                class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
               >
                 ×
               </button>

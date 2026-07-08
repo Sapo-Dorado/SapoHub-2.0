@@ -32,5 +32,19 @@
   </head>
   <body>
     {@inner_content}
+
+    <div
+      id="floating-assistant"
+      phx-hook="FloatingAssistant"
+      title="Claude Assistant"
+      style="position: fixed; bottom: 24px; right: 24px; z-index: 10000; cursor: grab; touch-action: none;"
+    >
+      <button
+        class="flex items-center justify-center w-12 h-12 rounded-full bg-[#151B1E] border-2 border-[#242D31] shadow-lg text-[#7FB069] hover:border-[#3C5934] hover:bg-[#1A2226] transition-colors select-none cursor-[inherit]"
+        aria-label="Claude Assistant"
+      >
+        <span class="hero-command-line size-5" />
+      </button>
+    </div>
   </body>
 </html>

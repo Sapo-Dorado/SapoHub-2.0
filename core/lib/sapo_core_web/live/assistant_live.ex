@@ -271,7 +271,7 @@ defmodule SapoCoreWeb.AssistantLive do
             )
           ]}
         >
-          <button phx-click="switch_tab" phx-value-id={tab.id} class="flex items-center gap-[7px]">
+          <button phx-click="switch_tab" phx-value-id={tab.id} class="flex items-center gap-[7px] cursor-pointer">
             <span class={[
               "w-1.5 h-1.5 rounded-full inline-block",
               if(tab.session_alive, do: "bg-[#7FB069]", else: "bg-[#3C5934]")
@@ -284,7 +284,7 @@ defmodule SapoCoreWeb.AssistantLive do
             phx-value-id={tab.id}
             title={if tab.notify_enabled, do: "Notifications on", else: "Notifications off"}
             class={[
-              "leading-none",
+              "leading-none cursor-pointer",
               if(tab.notify_enabled, do: "text-[#7FB069]", else: "text-[#3C5934] line-through")
             ]}
           >
@@ -294,14 +294,14 @@ defmodule SapoCoreWeb.AssistantLive do
             :if={length(@tabs) > 1}
             phx-click="close_tab"
             phx-value-id={tab.id}
-            class="text-[#86948F] hover:text-[#E0A458] leading-none"
+            class="text-[#86948F] hover:text-[#E0A458] leading-none cursor-pointer"
           >
             ×
           </button>
         </div>
         <button
           phx-click="add_tab"
-          class="px-3 py-[5px] text-[#86948F] hover:text-[#E6ECE9] whitespace-nowrap"
+          class="px-3 py-[5px] text-[#86948F] hover:text-[#E6ECE9] whitespace-nowrap cursor-pointer"
         >
           + new
         </button>

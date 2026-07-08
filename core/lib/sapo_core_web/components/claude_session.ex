@@ -29,7 +29,7 @@ defmodule SapoCoreWeb.ClaudeSession do
         <button
           phx-click="start_session"
           phx-value-session-id={@id}
-          class="self-start px-[18px] py-[9px] rounded-[4px] bg-[#7FB069] text-[#0C1409] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#8fbf7b]"
+          class="self-start px-[18px] py-[9px] rounded-[4px] bg-[#7FB069] text-[#0C1409] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#8fbf7b] cursor-pointer"
         >
           Start Claude session
         </button>
@@ -49,7 +49,7 @@ defmodule SapoCoreWeb.ClaudeSession do
                selection is impossible; this opens a selectable overlay. --%>
           <button
             id={"text-btn-#{@id}"}
-            class="absolute top-2 right-2 z-10 px-2 py-1 rounded-[3px] sm:hidden bg-black/40 font-mono text-xs text-white/50 active:text-white/90 touch-manipulation"
+            class="absolute top-2 right-2 z-10 px-2 py-1 rounded-[3px] sm:hidden bg-black/40 font-mono text-xs text-white/50 active:text-white/90 touch-manipulation cursor-pointer"
           >
             ⎘
           </button>
@@ -59,12 +59,26 @@ defmodule SapoCoreWeb.ClaudeSession do
           >
             <span class="text-xs font-mono text-[#86948F] animate-pulse">starting session…</span>
           </div>
+          <%!-- Covers the gap between "session_alive" (the GenServer/PTY is
+               up) and actual painted content (Claude has produced its first
+               frame, or a long-lived session's buffered history has finished
+               replaying into a fresh client — either can take several
+               seconds with NOTHING else on screen otherwise). Removed by the
+               Terminal hook on the first real output chunk it writes, so it
+               can never get stuck showing over live content. --%>
+          <div
+            :if={@session_alive and !@starting_session}
+            id={"terminal-loading-#{@id}"}
+            class="absolute inset-0 bg-[#0D1113] flex items-center justify-center border border-[#242D31] rounded-[4px] pointer-events-none"
+          >
+            <span class="text-xs font-mono text-[#86948F] animate-pulse">connecting to claude…</span>
+          </div>
         </div>
         <div class="mt-2 flex flex-wrap gap-2 sm:hidden">
           <button
             :for={{btn, label} <- mobile_buttons(@id)}
             id={btn}
-            class="px-4 py-2 border border-[#242D31] rounded-[4px] text-sm font-mono text-[#E6ECE9] active:bg-[#1A2226]"
+            class="px-4 py-2 border border-[#242D31] rounded-[4px] text-sm font-mono text-[#E6ECE9] active:bg-[#1A2226] cursor-pointer"
           >
             {label}
           </button>

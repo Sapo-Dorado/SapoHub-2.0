@@ -67,9 +67,12 @@ defmodule SapoKit.Module do
   @callback icon() :: String.t()
 
   @doc """
-  Additional dashboard button variants (LiveComponents rendered in the
-  module's fixed-size slot). The default icon+title button always exists;
-  the user picks the variant per utility in Settings.
+  Additional dashboard button OPTIONS (fully-custom LiveComponents
+  rendered in the module's slot) beyond the free standard icon + title.
+  A module may offer several; the user picks per utility in Settings.
+  See `SapoKit.DashboardButton` — there is no in-between "icon + title +
+  status text" option; use `statusline_items/1` for a short status
+  string instead.
   """
   @callback dashboard_buttons(config :: map()) :: [DashboardButton.t()]
 

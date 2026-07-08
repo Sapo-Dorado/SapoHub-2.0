@@ -44,9 +44,25 @@ both in releases). Scaffold a new module with `mix sapo.gen.module <name>`.
 
 Write one flake (see `examples/user-config/flake.nix`): pick modules,
 set `services.sapohub` options, `nixos-rebuild switch`. After that,
-deploys happen from the Settings page (or `sudo sapohub-deploy`), which
-pulls your config repo from GitHub, syncs UI preferences back into it
-(`sapohub-prefs.nix`), and rebuilds — streaming output into the UI.
+deploy from the Settings page — it pulls your config repo from GitHub,
+syncs UI preferences back into it (`sapohub-prefs.nix`), and rebuilds,
+streaming output into the UI.
+
+**Git/nix is always the source of truth for a manual deploy.** The
+Settings button runs `sapohub-deploy --sync-prefs`, which is the only
+thing that ever writes local UI preference changes back into
+`sapohub-prefs.nix`. A bare `sudo sapohub-deploy` — over SSH, from cron,
+anywhere outside the UI — skips that sync and rebuilds from exactly
+what's committed, full stop; it will never let an uncommitted local
+preference change quietly override your config. Pending preference
+changes aren't lost either way — they still apply live at runtime
+(`SapoCore.Prefs` reads a local overlay first) and stay queued for the
+next `--sync-prefs` deploy.
+
+**Commit the empty `sapohub-prefs.nix` stub from the example and import it
+from day one** (the example does this already), so that once you DO sync
+preferences from Settings, they round-trip into your git-tracked config
+and survive a redeploy onto a new host.
 
 Snapshots: "Save all data" produces one tar.gz (SQLite backup + every
 module's storage + manifest). Restore by deploying with

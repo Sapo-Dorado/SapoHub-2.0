@@ -33,7 +33,10 @@
         inherit system;
         modules = [
           sapohub.nixosModules.default
-          # ./sapohub-prefs.nix   # machine-owned, synced by deploys (Prefs)
+          # Machine-owned, kept in sync by deploys — see sapohub-prefs.nix.
+          # Committed as an empty stub so this import works from the very
+          # first `nixos-rebuild switch`, before any deploy has run.
+          ./sapohub-prefs.nix
           {
             services.sapohub = {
               enable = true;

@@ -45,6 +45,7 @@ defmodule SapoCoreWeb.SettingsLive do
        module_tabs: module_tabs,
        active_tab: "hub",
        button_choices: button_choices(),
+       dashboard_order: dashboard_order(),
        statusline_options: statusline_options(),
        saving: false,
        deploy_running: CommandSession.alive?(@deploy_session)
@@ -52,7 +53,9 @@ defmodule SapoCoreWeb.SettingsLive do
   end
 
   defp button_choices do
-    for mod <- Registry.modules(), mod.ui_routes() != [] do
+    for mod <- Registry.modules(),
+        mod.ui_routes() != [],
+        mod.dashboard_buttons(Registry.config_for(mod)) != [] do
       options =
         [%{id: "default", label: "default — icon + name"}] ++
           Enum.map(
@@ -66,6 +69,12 @@ defmodule SapoCoreWeb.SettingsLive do
         options: options,
         selected: SapoCore.Prefs.get("dashboard_button.#{mod.id()}", "default")
       }
+    end
+  end
+
+  defp dashboard_order do
+    for slot <- SapoCore.Dashboard.ordered_slots() do
+      %{id: to_string(slot.id), title: slot.title}
     end
   end
 
@@ -89,6 +98,19 @@ defmodule SapoCoreWeb.SettingsLive do
   def handle_event("set_dashboard_button", %{"module" => module_id, "variant" => variant}, socket) do
     :ok = SapoCore.Prefs.put("dashboard_button.#{module_id}", variant)
     {:noreply, assign(socket, button_choices: button_choices())}
+  end
+
+  def handle_event("move_dashboard_tile", %{"id" => id, "dir" => dir}, socket) do
+    ids = Enum.map(socket.assigns.dashboard_order, & &1.id)
+    from = Enum.find_index(ids, &(&1 == id))
+    to = if dir == "up", do: max(from - 1, 0), else: min(from + 1, length(ids) - 1)
+
+    ids
+    |> List.delete_at(from)
+    |> List.insert_at(to, id)
+    |> SapoCore.Dashboard.save_order()
+
+    {:noreply, assign(socket, dashboard_order: dashboard_order())}
   end
 
   def handle_event("toggle_statusline_item", %{"id" => id}, socket) do
@@ -192,7 +214,7 @@ defmodule SapoCoreWeb.SettingsLive do
           phx-click="switch_settings_tab"
           phx-value-tab={tab.id}
           class={[
-            "px-3 py-[5px] rounded-[3px] whitespace-nowrap",
+            "px-3 py-[5px] rounded-[3px] whitespace-nowrap cursor-pointer",
             if(tab.id == @active_tab,
               do: "bg-[#0D1113] border border-[#242D31] text-[#E6ECE9]",
               else: "border border-transparent text-[#86948F] hover:text-[#E6ECE9]"
@@ -223,14 +245,14 @@ defmodule SapoCoreWeb.SettingsLive do
               <button
                 phx-click="save_data"
                 disabled={@saving}
-                class="px-[18px] py-[9px] rounded-[4px] bg-[#7FB069] text-[#0C1409] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#8fbf7b] disabled:opacity-60"
+                class="px-[18px] py-[9px] rounded-[4px] bg-[#7FB069] text-[#0C1409] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#8fbf7b] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
               >
                 {if @saving, do: "Saving…", else: "Save all data"}
               </button>
               <button
                 phx-click="deploy"
                 disabled={@deploy_running}
-                class="px-[18px] py-[9px] rounded-[4px] bg-[#E0A458] text-[#1A1206] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#e8b370] disabled:opacity-60"
+                class="px-[18px] py-[9px] rounded-[4px] bg-[#E0A458] text-[#1A1206] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#e8b370] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
               >
                 {if @deploy_running, do: "Deploying…", else: "Deploy latest"}
               </button>
@@ -275,6 +297,37 @@ defmodule SapoCoreWeb.SettingsLive do
         </section>
 
         <section>
+          <.eyebrow>Dashboard order</.eyebrow>
+          <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
+            <table class="w-full text-[13.5px]">
+              <tr :for={{slot, index} <- Enum.with_index(@dashboard_order)} class="border-t first:border-t-0 border-[#242D31]">
+                <td class="px-4 py-2.5 font-mono text-[12.5px]">{slot.title}</td>
+                <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                  <button
+                    phx-click="move_dashboard_tile"
+                    phx-value-id={slot.id}
+                    phx-value-dir="up"
+                    disabled={index == 0}
+                    class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#86948F] border-[#242D31] hover:text-[#7FB069] hover:border-[#3C5934] cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    phx-click="move_dashboard_tile"
+                    phx-value-id={slot.id}
+                    phx-value-dir="down"
+                    disabled={index == length(@dashboard_order) - 1}
+                    class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#86948F] border-[#242D31] hover:text-[#7FB069] hover:border-[#3C5934] cursor-pointer disabled:opacity-30 disabled:pointer-events-none ml-1"
+                  >
+                    ↓
+                  </button>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </section>
+
+        <section :if={@button_choices != []}>
           <.eyebrow>Dashboard buttons</.eyebrow>
           <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
             <table class="w-full text-[13.5px]">
@@ -314,7 +367,7 @@ defmodule SapoCoreWeb.SettingsLive do
                     phx-click="toggle_statusline_item"
                     phx-value-id={opt.id}
                     class={[
-                      "font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border",
+                      "font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border cursor-pointer",
                       if(opt.enabled,
                         do: "text-[#7FB069] border-[#3C5934]",
                         else: "text-[#86948F] border-[#242D31]"

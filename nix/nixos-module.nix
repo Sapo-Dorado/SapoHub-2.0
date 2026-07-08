@@ -89,15 +89,19 @@ in
       type = types.attrsOf (types.either types.str types.bool);
       default = { };
       example = {
-        "dashboard_button.my_plate" = "status";
+        "dashboard_button.my_plate" = "preview";
+        "dashboard_order" = "my_plate,sapo_hello,assistant";
         "statusline.core.snapshot" = false;
       };
       description = ''
-        UI preferences (dashboard button variants, statusline toggles).
-        Usually you don't write these by hand: Settings-page edits apply
-        instantly via a local overlay, and the next deploy renders them
-        into sapohub-prefs.nix in your config repo (lib.mkDefault, so
-        anything set here directly wins).
+        UI preferences (dashboard button variants, dashboard tile order,
+        statusline toggles). Usually you don't write these by hand:
+        Settings-page edits apply instantly via a local overlay, and a
+        deploy run with `--sync-prefs` (the Settings "Deploy" button; see
+        nix/deploy-script.nix) renders them into sapohub-prefs.nix in your
+        config repo (lib.mkDefault, so anything set here directly wins).
+        A bare manual `sapohub-deploy` never does this sync — git/nix
+        stays authoritative for it.
       '';
     };
 

@@ -228,10 +228,17 @@ const TerminalHook = {
       this.term.reset();
     });
 
-    // Receive PTY output chunks (base64-encoded binary from Elixir)
+    // Receive PTY output chunks (base64-encoded binary from Elixir). The
+    // gap between "session_alive" and the first chunk actually arriving can
+    // be several seconds (long-lived sessions replay a large buffer; a
+    // fresh spawn waits on claude's own startup) with nothing else on
+    // screen, so the loading overlay (claude_session.ex) stays up until
+    // this fires for the first time — never gets stuck showing over real
+    // content, since it's removed here, not on a timer.
     this.handleEvent(`terminal_output:${sessionId}`, ({ data }) => {
       const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
       this.term.write(new TextDecoder().decode(bytes));
+      document.getElementById(`terminal-loading-${sessionId}`)?.remove();
     });
 
     this.handleEvent(`session_exit:${sessionId}`, ({ code }) => {
@@ -300,6 +307,29 @@ const TerminalHook = {
         console.debug(`[terminal] setup → cols=${cols} rows=${rows} el-width=${this.el.getBoundingClientRect().width}`);
         this.pushEvent("terminal_resize", { cols, rows, session_id: sessionId });
         this.pushEvent("replay_session", { session_id: sessionId });
+
+        // Defensive re-measure. This container sits inside several nested
+        // flex layers (tab bar -> flex-1 pane -> per-tab wrapper ->
+        // claude_session's own flex-1), under a 100dvh root — v1's terminal
+        // used a fixed pixel height with nothing to race against; this one
+        // does. One requestAnimationFrame is usually enough for the chain to
+        // settle, but isn't guaranteed for something this deep, especially
+        // right after a live-navigation mount. If a measurement taken a
+        // moment later disagrees with what we already told the server, the
+        // first one was taken mid-layout — correct it and force a clean
+        // redraw, otherwise Claude's UI stays painted for a size that
+        // doesn't match what's actually on screen (looks squished/blank).
+        setTimeout(() => {
+          if (!this._alive) return;
+          try { this.fitAddon.fit(); } catch (_) {}
+          const settledCols = this.term.cols || cols;
+          const settledRows = this.term.rows || rows;
+          if (settledCols !== cols || settledRows !== rows) {
+            console.debug(`[terminal] settled size differs (${cols}x${rows} -> ${settledCols}x${settledRows}), correcting`);
+            this.pushEvent("terminal_resize", { cols: settledCols, rows: settledRows, session_id: sessionId });
+            this.pushEvent("replay_session", { session_id: sessionId });
+          }
+        }, 500);
       });
     });
 

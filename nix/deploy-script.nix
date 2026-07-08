@@ -4,6 +4,13 @@
 # no user-controlled paths ever reach root. The rebuild runs detached in a
 # transient systemd unit (survives sapohub.service restarting itself), and
 # the deploy streams the journal.
+#
+# Nix/git is the source of truth by default: a bare `sapohub-deploy` run
+# (by hand over SSH, cron, whatever) pulls the config repo and rebuilds
+# from EXACTLY what's there — it never lets a local runtime overlay of UI
+# preferences override hand-written config. Only `--sync-prefs` opts in to
+# writing that overlay back into the repo first; the Settings "Deploy"
+# button is the one caller that passes it (see core/config/runtime.exs).
 { pkgs, lib }:
 
 { flakePath   # e.g. "/home/sapo/hub-config" (a git checkout)
@@ -22,12 +29,15 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   STATE_DIR="${stateDir}"
 
   SNAPSHOT=""
+  SYNC_PREFS=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --snapshot)
         SNAPSHOT="$2"; shift 2 ;;
+      --sync-prefs)
+        SYNC_PREFS="1"; shift ;;
       *)
-        echo "usage: sapohub-deploy [--snapshot <file>]" >&2; exit 1 ;;
+        echo "usage: sapohub-deploy [--snapshot <file>] [--sync-prefs]" >&2; exit 1 ;;
     esac
   done
 
@@ -50,8 +60,15 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   # module file (lib.mkDefault, so hand-written config always wins). The
   # user's flake imports ./sapohub-prefs.nix. After a successful sync the
   # overlay is consumed — the nix config now carries the prefs.
+  #
+  # ONLY when --sync-prefs is passed. Without it (the default — any bare
+  # manual run) this whole step is skipped: the overlay file is left
+  # exactly as-is (nothing lost, still live at runtime, still there for a
+  # future --sync-prefs run) and the rebuild below uses whatever's
+  # already committed in the config repo, unmodified. That's what makes
+  # git/nix authoritative for manual deploys.
   OVERLAY="$STATE_DIR/db/prefs-overlay.json"
-  if [ -f "$OVERLAY" ] && [ -s "$OVERLAY" ]; then
+  if [ "$SYNC_PREFS" = "1" ] && [ -f "$OVERLAY" ] && [ -s "$OVERLAY" ]; then
     echo "syncing UI preferences into $FLAKE_PATH/sapohub-prefs.nix ..."
 
     BASE="{}"
@@ -76,6 +93,8 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
       git -C "$FLAKE_PATH" push
     fi
     rm -f "$OVERLAY"
+  elif [ -f "$OVERLAY" ] && [ -s "$OVERLAY" ]; then
+    echo "skipping UI preference sync (no --sync-prefs) — git/nix config takes precedence"
   fi
 
   echo "starting rebuild (detached; streaming journal — Ctrl-C safe) ..."

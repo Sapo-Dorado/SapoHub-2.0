@@ -153,6 +153,22 @@
           pkgs = nixpkgs.legacyPackages.${system};
           toolsPkgs = nixpkgs-tools.legacyPackages.${system};
           beamPkgs = pkgs.beam.packages.erlang_27;
+
+          # expty ships a precompiled NIF; elixir_make/cc_precompiler will
+          # otherwise fetch it ad hoc over the network on first `mix deps.get`
+          # — same URL as the release build (compose.nix) uses, but WITHOUT
+          # the hash pin nix normally gives you, so a flaky/interrupted
+          # download can leave a corrupt spawn-helper in _build that still
+          # LOOKS like a valid ELF (right header, right size ballpark) but
+          # fails `posix_spawn` with `Exec format error` — patchelf'ing its
+          # interpreter/rpath doesn't help, because the file itself is bad,
+          # not just mis-linked. Pre-fetch the exact release-verified
+          # tarball here too, so the dev shell can never end up with a
+          # different (and possibly broken) copy than what ships to prod.
+          exptyNif = pkgs.fetchurl {
+            url = "https://github.com/cocoa-xu/expty/releases/download/v0.2.1/expty-nif-2.16-x86_64-linux-gnu-0.2.1.tar.gz";
+            hash = "sha256-HDLUODEpP6p0X/u0/HBux33V1pJb54xRF610F62HIcg=";
+          };
         in
         {
           default = pkgs.mkShell {
@@ -182,10 +198,21 @@
               export TAILWIND_PATH="${toolsPkgs.tailwindcss_4}/bin/tailwindcss"
               export ESBUILD_PATH="${pkgs.esbuild}/bin/esbuild"
 
+              # Point elixir_make/cc_precompiler at the same hash-verified
+              # expty NIF tarball the release build uses, so `mix deps.get`
+              # / `mix compile` here can't silently pick up a different (or
+              # corrupt) artifact. Safe to re-run every shell entry.
+              export ELIXIR_MAKE_CACHE_DIR="$PWD/.elixir_make_cache"
+              mkdir -p "$ELIXIR_MAKE_CACHE_DIR"
+              cp -f ${exptyNif} "$ELIXIR_MAKE_CACHE_DIR/expty-nif-2.16-x86_64-linux-gnu-0.2.1.tar.gz"
+
               # The expty precompiled NIF ships a spawn-helper binary linked
               # against the generic /lib64 dynamic linker, which does not
               # exist on NixOS. Patch any copies in _build (idempotent,
-              # dev-only; M6's mixRelease does the same for releases).
+              # dev-only; M6's mixRelease does the same for releases). If
+              # you still see `Exec format error` after this, the copy in
+              # _build predates the ELIXIR_MAKE_CACHE_DIR pin above — force
+              # a clean recompile: `mix deps.compile expty --force`.
               for helper in core/_build/*/lib/expty/priv/spawn-helper; do
                 if [ -f "$helper" ]; then
                   patchelf \

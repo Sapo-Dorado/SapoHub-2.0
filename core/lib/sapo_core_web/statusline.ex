@@ -14,6 +14,7 @@ defmodule SapoCoreWeb.Statusline do
   use Phoenix.Component
 
   import Phoenix.LiveView
+  import SapoCoreWeb.CoreComponents, only: [icon: 1]
 
   alias SapoCore.Statusline, as: Items
 
@@ -65,7 +66,7 @@ defmodule SapoCoreWeb.Statusline do
 
   def statusline(assigns) do
     ~H"""
-    <nav class="flex items-center h-[38px] px-4 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs overflow-x-auto whitespace-nowrap shrink-0 [scrollbar-width:none]">
+    <nav class="flex items-center h-11 px-4 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs overflow-x-auto whitespace-nowrap shrink-0 [scrollbar-width:none]">
       <.link navigate="/" class="text-[#7FB069] font-semibold">sapohub</.link>
       <span :if={@crumb} class="text-[#86948F] px-2">/</span>
       <span :if={@crumb} class="text-[#E6ECE9]">{@crumb}</span>
@@ -85,9 +86,9 @@ defmodule SapoCoreWeb.Statusline do
       <.link
         navigate="/settings"
         aria-label="Settings"
-        class="pl-3.5 ml-3.5 border-l border-[#242D31] text-[#86948F] hover:text-[#7FB069]"
+        class="flex items-center justify-center ml-3.5 -mr-4 h-11 w-11 border-l border-[#242D31] text-[#86948F] hover:text-[#7FB069] hover:bg-[#1A2226] transition-colors"
       >
-        ⚙
+        <.icon name="hero-cog-6-tooth" class="size-[18px]" />
       </.link>
     </nav>
     """

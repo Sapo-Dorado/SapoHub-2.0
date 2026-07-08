@@ -26,9 +26,10 @@ defmodule MyPlate.Module do
   def dashboard_buttons(_config) do
     [
       %SapoKit.DashboardButton{
-        id: "status",
-        label: "status — active & due counts",
-        component: MyPlateWeb.StatusButton
+        id: "preview",
+        label: "task preview — urgent tasks",
+        component: MyPlateWeb.TaskPreview,
+        size: :wide
       }
     ]
   end

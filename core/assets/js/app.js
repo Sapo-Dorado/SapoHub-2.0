@@ -24,6 +24,7 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/sapo_core"
 import TerminalHook from "./hooks/terminal"
+import FloatingAssistantHook from "./hooks/floating_assistant"
 import moduleHooks from "./module_hooks"
 import topbar from "../vendor/topbar"
 
@@ -31,7 +32,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, ...moduleHooks, Terminal: TerminalHook},
+  hooks: {...colocatedHooks, ...moduleHooks, Terminal: TerminalHook, FloatingAssistant: FloatingAssistantHook},
 })
 
 // Show progress bar on live navigation and form submits

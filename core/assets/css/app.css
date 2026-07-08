@@ -1,10 +1,22 @@
 /* See the Tailwind configuration guide for advanced usage
    https://tailwindcss.com/docs/configuration */
 
+/* xterm.js ships its own required stylesheet (layer positioning/stacking
+   for its canvas renderers, cursor, selection, etc.) — without it the
+   terminal's canvas layers stack in normal document flow instead of
+   overlapping, so real rendered content silently never becomes visible.
+   v1 imports this; it was missed when the assistant terminal was ported
+   to v2. */
+@import "./xterm.css";
+
 @import "tailwindcss" source(none);
 @source "../css";
 @source "../js";
 @source "../../lib/sapo_core_web";
+/* Non-web core lib also carries a few Tailwind/heroicon class literals
+   (e.g. the assistant slot's icon name in SapoCore.Dashboard) — scan it
+   too so those aren't silently dropped from the build. */
+@source "../../lib/sapo_core";
 /* Util modules ship LiveViews/components too — scan them so their tailwind
    classes and heroicons land in the build (same relative path in nix
    releases, where modules are staged next to core). */
