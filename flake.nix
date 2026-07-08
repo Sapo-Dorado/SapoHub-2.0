@@ -6,9 +6,18 @@
     nixpkgs.url = "github:NixOS/nixpkgs/4df1b885d76a54e1aa1a318f8d16fd6005b6401f";
     # Newer nixpkgs ONLY for tools missing from the pinned rev (tailwind v4).
     nixpkgs-tools.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Disk partitioning for the fresh-machine nixos-anywhere path (below).
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    # Real `claude` CLI for the assistant module — unfree, so it's an
+    # overlay applied only where actually needed (the fresh-machine example
+    # target), not forced on every downstream flake that composes SapoHub.
+    claude-code-nix.url = "github:sadjow/claude-code-nix";
   };
 
-  outputs = { self, nixpkgs, nixpkgs-tools }:
+  outputs = { self, nixpkgs, nixpkgs-tools, disko, claude-code-nix }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
@@ -61,6 +70,108 @@
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
+
+      # ── Fresh-machine bootstrap target (nixos-anywhere) ─────────────────────
+      # scripts/bootstrap.sh <ip> targets this. It's Tailscale-only by design —
+      # no public nginx/ACME/firewall, matching how SapoHub is actually meant
+      # to be reached (see README's "Fresh machine" section). Works on
+      # arbitrary hardware: the disk device (nix/disko-config.nix) and the
+      # hardware-configuration.nix (imported below) are both generated
+      # per-machine by the bootstrap script via nixos-anywhere's
+      # --generate-hardware-config, not hardcoded here. CHANGE the sshKey /
+      # tailscaleAuthKeyFile / secretsFile below for your own deploy — or
+      # better, copy this whole block into your own flake and start from
+      # there (see the "existing config" example under examples/ for how to
+      # fold nixosModules.default into a config you already own instead).
+      nixosConfigurations.fresh-machine =
+        let
+          system = "x86_64-linux";
+          built = self.lib.mkSapoHub {
+            inherit system;
+            modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
+            depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
+            npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
+          };
+        in
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [
+            disko.nixosModules.disko
+            ./nix/disko-config.nix
+            self.nixosModules.default
+            (
+              if builtins.pathExists ./hardware/generated-hardware-configuration.nix
+              then ./hardware/generated-hardware-configuration.nix
+              else ./hardware/example-hardware-configuration.nix
+            )
+
+            ({ pkgs, lib, ... }:
+              let
+                sshKey = "ssh-ed25519 AAAA..."; # CHANGE ME — your SSH public key
+                # scripts/bootstrap.sh can seed an authkey file at this path
+                # before first boot (see README) so the machine joins your
+                # tailnet unattended; omit --auth-key-file to skip and run
+                # `tailscale up` by hand after the first boot instead.
+                tailscaleAuthKeyFile = "/etc/sapohub/tailscale-authkey";
+                flakePkgs = import nixpkgs {
+                  inherit (pkgs) system;
+                  config.allowUnfree = true;
+                  overlays = [ claude-code-nix.overlays.default ];
+                };
+              in
+              {
+                # ---- SSH access ----
+                users.users.root.openssh.authorizedKeys.keys = [ sshKey ];
+                services.openssh.enable = true;
+
+                # ---- Tailscale (the only network path in; no public exposure) ----
+                services.tailscale.enable = true;
+                networking.firewall.trustedInterfaces = [ "tailscale0" ];
+                networking.firewall.allowedTCPPorts = [ 22 ];
+                systemd.services.tailscale-autoconnect = {
+                  description = "Join the tailnet on first boot, if an authkey is present";
+                  after = [ "network-pre.target" "tailscale.service" ];
+                  wants = [ "network-pre.target" "tailscale.service" ];
+                  wantedBy = [ "multi-user.target" ];
+                  serviceConfig.Type = "oneshot";
+                  script = ''
+                    ${pkgs.tailscale}/bin/tailscale status --json 2>/dev/null | ${pkgs.jq}/bin/jq -e '.BackendState == "Running"' >/dev/null && exit 0
+                    if [ -f "${tailscaleAuthKeyFile}" ]; then
+                      ${pkgs.tailscale}/bin/tailscale up --auth-key "file:${tailscaleAuthKeyFile}"
+                    fi
+                  '';
+                };
+
+                # ---- Application ----
+                # Reachable at http://<tailscale-hostname>:4000 once joined —
+                # no domain/TLS needed on a Tailscale-only box. Set `host` to
+                # your actual tailnet hostname once you know it, so
+                # PHX_HOST/URL generation match (cosmetic; doesn't block
+                # first boot).
+                services.sapohub = {
+                  enable = true;
+                  package = built.package;
+                  cliPackage = built.cli;
+                  host = "localhost";
+                  secretsFile = "/etc/sapohub/secrets.env"; # CHANGE ME — seed before bootstrap, see README
+                  assistant.claudePackage = flakePkgs.claude-code;
+                  deploy = {
+                    flakePath = "/etc/sapohub-config"; # CHANGE ME — where you'll check out your config repo
+                    flakeAttr = "fresh-machine";
+                  };
+                };
+
+                nixpkgs.config.allowUnfree = true;
+                environment.systemPackages = [ flakePkgs.claude-code pkgs.google-chrome ];
+
+                networking.hostName = "sapohub";
+                boot.loader.grub.enable = true;
+                boot.loader.grub.efiSupport = false;
+
+                system.stateVersion = "24.11";
+              })
+          ];
+        };
 
       # CI smoke build: core + the default module set.
       packages = forAllSystems (system:

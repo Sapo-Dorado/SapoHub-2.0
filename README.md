@@ -20,8 +20,13 @@ contract/    :sapo_module_kit — the module contract + SapoKit.* facades
 core/        :sapo_core — the Phoenix app (dashboard, assistant, settings,
              scheduler, notify, storage, snapshots, AI context, CLI core)
 modules/     in-repo utility modules (hello = reference, my_plate = tasks)
-nix/         compose.nix, cli.nix, nixos-module.nix, deploy-script.nix
-examples/    user-config/flake.nix — the ONE file a user writes
+nix/         compose.nix, cli.nix, nixos-module.nix, deploy-script.nix,
+             disko-config.nix — fresh-machine disk layout
+hardware/    example-hardware-configuration.nix, example-disk-device.nix —
+             fallback placeholders; scripts/bootstrap.sh generates the real
+             per-machine versions (gitignored) at deploy time
+scripts/     bootstrap.sh — fresh-machine deploy via nixos-anywhere
+examples/    user-config/flake.nix — splice SapoHub into an EXISTING config
 docs/        module-authoring.md — how to build a utility module
 ```
 
@@ -42,8 +47,59 @@ both in releases). Scaffold a new module with `mix sapo.gen.module <name>`.
 
 ## Deployment
 
-Write one flake (see `examples/user-config/flake.nix`): pick modules,
-set `services.sapohub` options, `nixos-rebuild switch`. After that,
+There are two starting points — see `examples/README.md` for the full
+comparison. Short version:
+
+### Fresh machine (nixos-anywhere)
+
+No existing NixOS config, starting from a wiped box (or one you're
+willing to wipe) that's reachable over SSH as root, booted into any
+NixOS-based environment (the official installer ISO works fine):
+
+```sh
+./scripts/bootstrap.sh <ip>
+```
+
+This targets `nixosConfigurations.fresh-machine` in the root `flake.nix`
+— Tailscale-only (no public nginx/ACME/firewall; reachable at
+`http://<tailscale-hostname>:4000` once it joins your tailnet), disko
+disk layout, `services.sapohub` pre-wired. It works on hardware you
+haven't described to Nix in advance: nixos-anywhere SSHes into the
+target, runs `nixos-generate-config` there, and copies the result back
+locally (`hardware/generated-hardware-configuration.nix`) before
+building — you don't hand-write a hardware config or know the exact
+kernel modules up front. You do need to know (or check via
+`ssh root@<ip> lsblk`) which block device to partition; pass it with
+`--disk /dev/whatever` if it isn't `/dev/sda`.
+
+**Secrets**: by default the script generates a fresh `SECRET_KEY_BASE`
+and seeds it onto the target via nixos-anywhere's `--extra-files`
+mechanism *before* first boot, so `sapohub.service` has what it needs
+the moment it starts instead of crash-looping until someone SSHes in.
+Pass `--secrets-file <path>` to bring your own instead (useful once you
+have module secrets beyond just `SECRET_KEY_BASE` — Telegram bot tokens,
+etc. — see each module's docs for what it expects in that file).
+
+**Tailscale**: pass `--tailscale-auth-key-file <path>` (a file containing
+a Tailscale auth key) to have the machine join your tailnet unattended on
+first boot. Without it, SSH in after bootstrap and run `tailscale up`
+yourself — the root SSH session bootstrap.sh used stays valid either way,
+since SSH isn't gated behind Tailscale.
+
+The script always asks you to re-type the target IP as a last
+confirmation before running nixos-anywhere — it's destructive (it
+partitions the disk), and there's no undo.
+
+**After bootstrap**: it clones this repo's own `origin` remote onto the
+target at `/etc/sapohub-config` (what `services.sapohub.deploy.flakePath`
+points at), so future updates work immediately — `ssh <ip>`, then
+`sapohub-deploy`, or the Settings page's Deploy button.
+
+### Existing NixOS box
+
+Already manage a NixOS config? Write one flake (see
+`examples/user-config/flake.nix`): pick modules, splice in
+`services.sapohub`, `nixos-rebuild switch`. After that,
 deploy from the Settings page — it pulls your config repo from GitHub,
 syncs UI preferences back into it (`sapohub-prefs.nix`), and rebuilds,
 streaming output into the UI.
