@@ -56,7 +56,7 @@
           elixirModule = "MyPlate.Module";
           config = { };
           cliFragment = true;
-          jsHooks = false;
+          jsHooks = true;
         };
       };
 

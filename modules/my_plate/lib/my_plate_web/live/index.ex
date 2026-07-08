@@ -1,28 +1,53 @@
 defmodule MyPlateWeb.Live.Index do
   @moduledoc """
-  My Plate task page (pond-at-night styling per the design mockup):
-  add field, priority-grouped list, complete/uncomplete, recurring marker.
+  My Plate task page: priority-grouped, color-coded, drag-reorderable task
+  list; a per-priority-section creation modal (title + due date, priority
+  implied by which section's "+" was clicked); and a recurring-tasks
+  management modal (create/edit/delete/toggle-active). Draggability is
+  provided by the module-contributed `TaskSortable` JS hook (see
+  `assets/hooks.js`) — dropping a task pushes `"reorder"` with the same
+  `{task_id, new_priority, new_position}` shape `MyPlate.reorder_task/3`
+  already expects.
   """
   use SapoKit.Web, :live_view
+
+  alias MyPlate.RecurringTask
+
+  @priorities ["high", "medium", "low"]
 
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: SapoKit.PubSub.subscribe("my_plate:tasks")
 
-    {:ok, load(socket)}
+    {:ok,
+     socket
+     |> assign(
+       adding_to: nil,
+       recurring_open: false,
+       recurring_editing: nil,
+       recurring_tasks: [],
+       recurring_form: nil
+     )
+     |> load()}
   end
 
-  @impl true
-  def handle_event("add", %{"title" => title}, socket) do
-    title = String.trim(title)
+  # ── Tasks ────────────────────────────────────────────────────────────────
 
-    if title == "" do
-      {:noreply, socket}
-    else
-      case MyPlate.create_task(%{title: title}) do
-        {:ok, _task} -> {:noreply, load(socket)}
-        {:error, _} -> {:noreply, put_flash(socket, :error, "Could not add task")}
-      end
+  @impl true
+  def handle_event("show_add_form", %{"priority" => priority}, socket) do
+    {:noreply, assign(socket, adding_to: priority)}
+  end
+
+  def handle_event("close_add_form", _, socket) do
+    {:noreply, assign(socket, adding_to: nil)}
+  end
+
+  def handle_event("create_task", %{"task" => params}, socket) do
+    params = Map.put_new(params, "due_date", nil)
+
+    case MyPlate.create_task(params) do
+      {:ok, _task} -> {:noreply, socket |> assign(adding_to: nil) |> load()}
+      {:error, _} -> {:noreply, put_flash(socket, :error, "Could not add task")}
     end
   end
 
@@ -36,9 +61,72 @@ defmodule MyPlateWeb.Live.Index do
     {:noreply, load(socket)}
   end
 
-  def handle_event("set_priority", %{"id" => id, "priority" => priority}, socket) do
-    {:ok, _} = MyPlate.reorder_task(id, priority, 0)
+  def handle_event(
+        "reorder",
+        %{"task_id" => id, "new_priority" => priority, "new_position" => position},
+        socket
+      ) do
+    {:ok, _} = MyPlate.reorder_task(id, priority, position)
     {:noreply, load(socket)}
+  end
+
+  # ── Recurring tasks ─────────────────────────────────────────────────────
+
+  def handle_event("show_recurring", _, socket) do
+    {:noreply, assign(socket, recurring_open: true, recurring_tasks: MyPlate.list_all_recurring_tasks())}
+  end
+
+  def handle_event("close_recurring", _, socket) do
+    {:noreply, assign(socket, recurring_open: false, recurring_editing: nil)}
+  end
+
+  def handle_event("new_recurring", _, socket) do
+    {:noreply, assign(socket, recurring_editing: :new, recurring_form: %{})}
+  end
+
+  def handle_event("edit_recurring", %{"id" => id}, socket) do
+    rt = MyPlate.get_recurring_task!(id)
+    {:noreply, assign(socket, recurring_editing: id, recurring_form: recurring_form_data(rt))}
+  end
+
+  def handle_event("cancel_recurring_form", _, socket) do
+    {:noreply, assign(socket, recurring_editing: nil, recurring_form: nil)}
+  end
+
+  def handle_event("update_recurring_form", %{"recurring_task" => params}, socket) do
+    {:noreply, assign(socket, recurring_form: params)}
+  end
+
+  def handle_event("save_recurring", %{"recurring_task" => params}, socket) do
+    result =
+      case socket.assigns.recurring_editing do
+        :new -> MyPlate.create_recurring_task(params)
+        id -> MyPlate.update_recurring_task(MyPlate.get_recurring_task!(id), params)
+      end
+
+    case result do
+      {:ok, _rt} ->
+        {:noreply,
+         assign(socket,
+           recurring_editing: nil,
+           recurring_form: nil,
+           recurring_tasks: MyPlate.list_all_recurring_tasks()
+         )}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, recurring_form: raw_params_with_errors(params, changeset))}
+    end
+  end
+
+  def handle_event("delete_recurring", %{"id" => id}, socket) do
+    :ok = id |> MyPlate.get_recurring_task!() |> MyPlate.delete_recurring_task() |> ok_or_raise()
+    {:noreply, assign(socket, recurring_tasks: MyPlate.list_all_recurring_tasks())}
+  end
+
+  def handle_event("toggle_recurring_active", %{"id" => id}, socket) do
+    rt = MyPlate.get_recurring_task!(id)
+    {:ok, _} = MyPlate.update_recurring_task(rt, %{"active" => !rt.active})
+    {:noreply, assign(socket, recurring_tasks: MyPlate.list_all_recurring_tasks())}
   end
 
   @impl true
@@ -54,17 +142,128 @@ defmodule MyPlateWeb.Live.Index do
 
     assign(socket,
       page_title: "my plate",
-      groups:
-        for priority <- ["high", "medium", "low"] do
-          {priority, Enum.filter(tasks, &(&1.priority == priority))}
-        end,
+      groups: for(priority <- @priorities, do: {priority, Enum.filter(tasks, &(&1.priority == priority))}),
       count: length(tasks)
     )
   end
 
+  defp recurring_form_data(%RecurringTask{} = rt) do
+    %{
+      "title" => rt.title,
+      "priority" => rt.priority,
+      "recurrence" => rt.recurrence,
+      "day_of_week" => rt.day_of_week && to_string(rt.day_of_week),
+      "day_of_month" => rt.day_of_month && to_string(rt.day_of_month)
+    }
+  end
+
+  defp raw_params_with_errors(params, _changeset), do: params
+
+  defp ok_or_raise({:ok, _}), do: :ok
+  defp ok_or_raise({:error, reason}), do: raise("delete_recurring_task failed: #{inspect(reason)}")
+
+  # ── Priority styling (shared across the task list and both modals) ──────
+
+  defp priority_dot("high"), do: "bg-[#C1594A]"
+  defp priority_dot("medium"), do: "bg-[#E0A458]"
+  defp priority_dot("low"), do: "bg-[#5B7A8C]"
+
+  defp priority_text("high"), do: "text-[#C1594A]"
+  defp priority_text("medium"), do: "text-[#E0A458]"
+  defp priority_text("low"), do: "text-[#5B7A8C]"
+
+  defp priority_border("high"), do: "border-[#C1594A]"
+  defp priority_border("medium"), do: "border-[#E0A458]"
+  defp priority_border("low"), do: "border-[#5B7A8C]"
+
+  defp priority_button("high"), do: "bg-[#C1594A] hover:bg-[#cc6a5b] text-[#1A0D0A]"
+  defp priority_button("medium"), do: "bg-[#E0A458] hover:bg-[#e8b370] text-[#1A1206]"
+  defp priority_button("low"), do: "bg-[#5B7A8C] hover:bg-[#6c8a9c] text-[#0A1216]"
+
+  defp weekday_name(1), do: "Monday"
+  defp weekday_name(2), do: "Tuesday"
+  defp weekday_name(3), do: "Wednesday"
+  defp weekday_name(4), do: "Thursday"
+  defp weekday_name(5), do: "Friday"
+  defp weekday_name(6), do: "Saturday"
+  defp weekday_name(7), do: "Sunday"
+
+  defp recurrence_summary(%RecurringTask{recurrence: "daily"}), do: "daily"
+
+  defp recurrence_summary(%RecurringTask{recurrence: "weekly", day_of_week: dow}) when is_integer(dow),
+    do: "weekly · #{weekday_name(dow)}"
+
+  defp recurrence_summary(%RecurringTask{recurrence: "monthly", day_of_month: dom}) when is_integer(dom),
+    do: "monthly · day #{dom}"
+
+  defp recurrence_summary(_), do: "—"
+
   @impl true
   def render(assigns) do
     ~H"""
+    <style>
+      /*
+        SortableJS's ghostClass ("task-ghost") marks the placeholder row
+        showing where the dragged item will land inside the TARGET list —
+        distinct from .task-fallback below, which is the separate clone
+        that follows the cursor. A translucent "lifted" look reads fine
+        here: the thing it used to collide with (an empty section's
+        "Nothing here." text) is now hidden outright for the duration of
+        any drag — see the `[.my-plate-dragging_&]` variant on that <p>,
+        toggled by TaskSortable's onStart/onEnd (hooks.js) — so there's
+        nothing left underneath for a semi-transparent ghost to blend
+        into.
+      */
+      .task-ghost {
+        opacity: 0.5 !important;
+        background: #151B1E !important;
+        border: 1px solid #242D31 !important;
+      }
+      /*
+        The floating clone that follows the cursor during a drag (only a
+        real, stylable DOM element now that hooks.js sets forceFallback —
+        see that file's comment for why). Translucent like the ghost
+        above, for the same reason: whatever's underneath is already
+        hidden while a drag is active, so this can look like a "lifted"
+        card instead of a fully solid duplicate.
+
+        `fallbackOnBody: true` (hooks.js) appends this clone as a direct
+        child of <body>, outside the page's own wrapper div — which is
+        where `text-[#E6ECE9]` actually lives; every row's own text relies
+        on inheriting it rather than declaring its own color. Escaping
+        that wrapper meant the clone fell back to Tailwind's preflight
+        default (near-black), rendering the title as good as invisible
+        against the dark card background. Set it explicitly here instead
+        of relying on inheritance.
+      */
+      .task-fallback,
+      .task-fallback * {
+        color: #E6ECE9 !important;
+      }
+      .task-fallback {
+        background: #151B1E !important;
+        border: 1px solid #3C5934 !important;
+        border-radius: 4px;
+        opacity: 0.85 !important;
+        box-shadow: none !important;
+      }
+      /*
+        Hides "Nothing here." for the duration of any drag (TaskSortable
+        in hooks.js toggles my-plate-dragging on <body> via onStart/onEnd).
+        Written as a plain flat selector rather than Tailwind's
+        `[.my-plate-dragging_&]:opacity-0` arbitrary-variant — that
+        compiles to native CSS nesting (`.my-plate-dragging & { ... }`),
+        which only landed in Safari 16.5 (May 2023); on an iOS device
+        below that, or hitting any nesting-parser quirk, the whole rule
+        gets silently dropped and the text just never fades — which is
+        exactly the "still visible" report on iOS specifically, while
+        desktop Chrome (fully supports nesting) showed no problem in
+        testing. A plain descendant selector has no such floor.
+      */
+      .my-plate-dragging .my-plate-empty-text {
+        opacity: 0 !important;
+      }
+    </style>
     <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
       <SapoCoreWeb.Statusline.statusline
         crumb="my plate"
@@ -73,64 +272,391 @@ defmodule MyPlateWeb.Live.Index do
       />
 
       <main class="max-w-[980px] mx-auto px-4 py-6 space-y-7">
-        <form phx-submit="add" class="flex gap-2.5">
-          <input
-            type="text"
-            name="title"
-            placeholder="Add a task…"
-            autocomplete="off"
-            class="flex-1 px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] placeholder-[#86948F] focus:border-[#7FB069] focus:outline-none"
-          />
+        <div class="flex items-center justify-between">
+          <h1 class="font-mono text-[13.5px] font-semibold text-[#E6ECE9]">my plate</h1>
           <button
-            type="submit"
-            class="px-[18px] py-[9px] rounded-[4px] bg-[#7FB069] text-[#0C1409] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#8fbf7b] cursor-pointer"
+            phx-click="show_recurring"
+            class="flex items-center gap-1.5 px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[11.5px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
           >
-            Add
+            <span class="text-sm leading-none">↻</span> recurring
           </button>
-        </form>
+        </div>
 
-        <section :for={{priority, tasks} <- @groups} :if={tasks != []}>
+        <section :for={{priority, tasks} <- @groups}>
           <div class="flex items-center gap-2.5 mb-3 font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
+            <span class={["size-1.5 rounded-full", priority_dot(priority)]}></span>
             {priority} priority
             <span class="h-px flex-1 bg-[#242D31]"></span>
+            <button
+              phx-click="show_add_form"
+              phx-value-priority={priority}
+              aria-label={"Add #{priority} priority task"}
+              class={[
+                "flex items-center justify-center w-[20px] h-[20px] rounded-[3px] border font-mono text-[13px] leading-none cursor-pointer transition-colors",
+                "border-[#242D31] text-[#86948F] hover:text-[#E6ECE9]",
+                "hover:" <> priority_border(priority)
+              ]}
+            >
+              +
+            </button>
           </div>
-          <ul class="border border-[#242D31] rounded-[4px] bg-[#151B1E] divide-y divide-[#242D31]">
-            <li :for={task <- tasks} class="flex items-center gap-3 px-4 py-3">
-              <button
-                phx-click="complete"
-                phx-value-id={task.id}
-                aria-label="Complete task"
-                class="w-[17px] h-[17px] shrink-0 rounded-full border-[1.5px] border-[#86948F] hover:border-[#7FB069] cursor-pointer"
-              >
-              </button>
-              <span class="flex-1 text-sm min-w-0">{task.title}</span>
-              <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]">↻</span>
-              <span :if={task.due_date} class={[
-                "font-mono text-[11.5px] whitespace-nowrap",
-                if(Date.compare(task.due_date, MyPlate.today()) != :gt,
-                  do: "text-[#E0A458]",
-                  else: "text-[#86948F]"
+
+          <!--
+            The sortable container is ALWAYS mounted, even with zero tasks —
+            never swapped out for a plain empty-state element. An empty
+            priority section still needs a live SortableJS drop target, or
+            cross-category drags into it have nowhere to land (and a
+            just-emptied section would tear down its Sortable instance
+            mid-interaction). The "Nothing here" copy is a separate,
+            pointer-events-none sibling overlaid on top instead of a
+            replacement — same structural pattern v1 uses.
+          -->
+          <div class="relative">
+            <ul
+              id={"task-list-#{priority}"}
+              phx-hook="TaskSortable"
+              data-group={priority}
+              class={[
+                "min-h-[44px] rounded-[4px] divide-y divide-[#242D31]",
+                if(tasks == [],
+                  do: "bg-[#12171A]",
+                  else: "border border-[#242D31] bg-[#151B1E]"
                 )
-              ]}>
-                {task.due_date}
-              </span>
-              <button
-                phx-click="delete"
-                phx-value-id={task.id}
-                aria-label="Delete task"
-                class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
+              ]}
+            >
+              <li
+                :for={task <- tasks}
+                id={"task-#{task.id}"}
+                data-id={task.id}
+                class="flex items-center gap-3 px-3 py-3"
               >
-                ×
-              </button>
-            </li>
-          </ul>
+                <span class="drag-handle shrink-0 cursor-grab active:cursor-grabbing text-[#3C5934] hover:text-[#86948F] font-mono text-[13px] leading-none select-none px-0.5">
+                  ⠿
+                </span>
+                <button
+                  phx-click="complete"
+                  phx-value-id={task.id}
+                  aria-label="Complete task"
+                  class={[
+                    "w-[17px] h-[17px] shrink-0 rounded-full border-[1.5px] hover:border-[#7FB069] cursor-pointer",
+                    priority_border(priority)
+                  ]}
+                >
+                </button>
+                <span class="flex-1 text-sm min-w-0 truncate">{task.title}</span>
+                <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]" title="Recurring task">↻</span>
+                <span
+                  :if={task.due_date}
+                  class={[
+                    "font-mono text-[11.5px] whitespace-nowrap",
+                    if(Date.compare(task.due_date, MyPlate.today()) != :gt,
+                      do: "text-[#E0A458]",
+                      else: "text-[#86948F]"
+                    )
+                  ]}
+                >
+                  {task.due_date}
+                </span>
+                <button
+                  phx-click="delete"
+                  phx-value-id={task.id}
+                  aria-label="Delete task"
+                  class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
+                >
+                  ×
+                </button>
+              </li>
+            </ul>
+            <p
+              :if={tasks == []}
+              class="my-plate-empty-text absolute inset-0 flex items-center px-3 font-mono text-[12px] text-[#86948F] pointer-events-none"
+            >
+              Nothing here.
+            </p>
+          </div>
         </section>
 
         <p :if={@count == 0} class="text-[#86948F] text-sm">
-          Nothing on your plate. Add a task above.
+          Nothing on your plate. Add a task with the + on any priority above.
         </p>
       </main>
+
+      <.add_task_modal :if={@adding_to} priority={@adding_to} />
+      <.recurring_modal
+        :if={@recurring_open}
+        editing={@recurring_editing}
+        form={@recurring_form}
+        recurring_tasks={@recurring_tasks}
+      />
     </div>
+    """
+  end
+
+  # ── Task creation modal ──────────────────────────────────────────────────
+
+  attr :priority, :string, required: true
+
+  defp add_task_modal(assigns) do
+    ~H"""
+    <div
+      id="add-task-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      phx-window-keydown="close_add_form"
+      phx-key="escape"
+    >
+      <div class="absolute inset-0" phx-click="close_add_form"></div>
+      <div class={[
+        "relative w-full max-w-[400px] rounded-[4px] bg-[#151B1E] border border-[#242D31] border-l-[3px] overflow-hidden",
+        priority_border(@priority)
+      ]}>
+        <div class="px-4 pt-4 pb-3 border-b border-[#242D31]">
+          <div class="font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
+            add — <span class={priority_text(@priority)}>{@priority} priority</span>
+          </div>
+        </div>
+
+        <form phx-submit="create_task" class="px-4 py-4 space-y-3">
+          <input type="hidden" name="task[priority]" value={@priority} />
+          <div class="min-w-0">
+            <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">title</label>
+            <input
+              type="text"
+              name="task[title]"
+              placeholder="Task title…"
+              autocomplete="off"
+              autofocus
+              required
+              class="w-full min-w-0 box-border px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] placeholder-[#86948F] focus:border-[#7FB069] focus:outline-none"
+            />
+          </div>
+          <div class="min-w-0">
+            <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">due date (optional)</label>
+            <!--
+              Recurring overflow bug (also present in v1): a native
+              <input type="date"> has an internal mm/dd/yyyy + calendar-icon
+              layout with its own minimum content width, which some
+              browsers will render past an author-specified `width` rather
+              than shrink — even though the box itself is `border-box`.
+              `min-w-0` lets it actually honor `w-full` inside this flex/
+              block ancestor instead of falling back to the UA's implicit
+              `min-width: auto`, and `overflow-hidden` on the modal card
+              (above) is the backstop: if a browser still insists on
+              rendering the control wider than its box, it gets clipped at
+              the card's own rounded border instead of visually spilling
+              past it. The native calendar *popup* itself is unaffected —
+              it's painted by the browser's UI layer, not page layout.
+            -->
+            <input
+              type="date"
+              name="task[due_date]"
+              class="w-full min-w-0 box-border pl-3 pr-4 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] focus:border-[#7FB069] focus:outline-none [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:mr-0"
+            />
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              phx-click="close_add_form"
+              class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[12px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class={[
+                "px-4 py-[7px] rounded-[4px] font-mono text-[12px] font-semibold tracking-[.02em] cursor-pointer",
+                priority_button(@priority)
+              ]}
+            >
+              Add task
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    """
+  end
+
+  # ── Recurring tasks modal ─────────────────────────────────────────────────
+
+  attr :editing, :any, required: true
+  attr :form, :any, required: true
+  attr :recurring_tasks, :list, required: true
+
+  defp recurring_modal(assigns) do
+    ~H"""
+    <div
+      id="recurring-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      phx-window-keydown="close_recurring"
+      phx-key="escape"
+    >
+      <div class="absolute inset-0" phx-click="close_recurring"></div>
+      <div class="relative w-full max-w-[480px] max-h-[80vh] overflow-y-auto rounded-[4px] bg-[#151B1E] border border-[#242D31]">
+        <div class="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#242D31]">
+          <div class="font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
+            recurring tasks
+          </div>
+          <button phx-click="close_recurring" class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer">×</button>
+        </div>
+
+        <div class="p-4">
+          <.recurring_form :if={@editing} editing={@editing} form={@form} />
+
+          <div :if={!@editing} class="space-y-3">
+            <button
+              phx-click="new_recurring"
+              class="w-full px-3 py-[9px] rounded-[4px] border border-dashed border-[#242D31] font-mono text-[12px] text-[#86948F] hover:text-[#7FB069] hover:border-[#3C5934] cursor-pointer"
+            >
+              + new recurring task
+            </button>
+
+            <p :if={@recurring_tasks == []} class="font-mono text-[12px] text-[#86948F] py-2">
+              No recurring tasks yet.
+            </p>
+
+            <ul :if={@recurring_tasks != []} class="border border-[#242D31] rounded-[4px] divide-y divide-[#242D31]">
+              <li :for={rt <- @recurring_tasks} class="flex items-center gap-3 px-3 py-2.5">
+                <span class={["size-1.5 rounded-full shrink-0", priority_dot(rt.priority)]}></span>
+                <div class="flex-1 min-w-0">
+                  <div class={["text-sm truncate", if(rt.active, do: "text-[#E6ECE9]", else: "text-[#86948F] line-through")]}>
+                    {rt.title}
+                  </div>
+                  <div class="font-mono text-[11px] text-[#86948F]">{recurrence_summary(rt)}</div>
+                </div>
+                <button
+                  phx-click="toggle_recurring_active"
+                  phx-value-id={rt.id}
+                  class={[
+                    "font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border cursor-pointer",
+                    if(rt.active,
+                      do: "text-[#7FB069] border-[#3C5934]",
+                      else: "text-[#86948F] border-[#242D31]"
+                    )
+                  ]}
+                >
+                  {if rt.active, do: "active", else: "paused"}
+                </button>
+                <button
+                  phx-click="edit_recurring"
+                  phx-value-id={rt.id}
+                  class="font-mono text-[11px] text-[#86948F] hover:text-[#E6ECE9] cursor-pointer"
+                >
+                  edit
+                </button>
+                <button
+                  phx-click="delete_recurring"
+                  phx-value-id={rt.id}
+                  class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
+                >
+                  ×
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :editing, :any, required: true
+  attr :form, :any, required: true
+
+  defp recurring_form(assigns) do
+    f = assigns.form || %{}
+    recurrence = f["recurrence"] || "daily"
+
+    assigns =
+      assign(assigns,
+        title: f["title"] || "",
+        priority: f["priority"] || "medium",
+        recurrence: recurrence,
+        day_of_week: f["day_of_week"],
+        day_of_month: f["day_of_month"]
+      )
+
+    ~H"""
+    <form phx-submit="save_recurring" phx-change="update_recurring_form" class="space-y-3">
+      <div>
+        <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">title</label>
+        <input
+          type="text"
+          name="recurring_task[title]"
+          value={@title}
+          placeholder="Recurring task title…"
+          autocomplete="off"
+          required
+          class="w-full px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] placeholder-[#86948F] focus:border-[#7FB069] focus:outline-none"
+        />
+      </div>
+
+      <div>
+        <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">priority</label>
+        <div class="flex gap-2">
+          <label :for={p <- ["high", "medium", "low"]} class="flex-1">
+            <input type="radio" name="recurring_task[priority]" value={p} checked={@priority == p} class="peer hidden" />
+            <div class={[
+              "flex items-center justify-center gap-1.5 px-2 py-[7px] rounded-[4px] border font-mono text-[11.5px] cursor-pointer transition-colors",
+              "border-[#242D31] text-[#86948F] hover:text-[#E6ECE9]",
+              "peer-checked:border-transparent",
+              "peer-checked:" <> priority_button(p)
+            ]}>
+              <span class={["size-1.5 rounded-full shrink-0 peer-checked:hidden", priority_dot(p)]}></span>
+              {p}
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">repeats</label>
+        <select
+          name="recurring_task[recurrence]"
+          class="w-full px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] focus:border-[#7FB069] focus:outline-none"
+        >
+          <option :for={r <- ["daily", "weekly", "monthly"]} value={r} selected={@recurrence == r}>{r}</option>
+        </select>
+      </div>
+
+      <div :if={@recurrence == "weekly"}>
+        <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">day of week</label>
+        <select
+          name="recurring_task[day_of_week]"
+          class="w-full px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] focus:border-[#7FB069] focus:outline-none"
+        >
+          <option :for={d <- 1..7} value={d} selected={@day_of_week == to_string(d)}>{weekday_name(d)}</option>
+        </select>
+      </div>
+
+      <div :if={@recurrence == "monthly"}>
+        <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">day of month</label>
+        <input
+          type="number"
+          min="1"
+          max="31"
+          name="recurring_task[day_of_month]"
+          value={@day_of_month}
+          class="w-full px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] focus:border-[#7FB069] focus:outline-none"
+        />
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button
+          type="button"
+          phx-click="cancel_recurring_form"
+          class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[12px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
+        >
+          Back
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-[7px] rounded-[4px] bg-[#7FB069] hover:bg-[#8fbf7b] text-[#0C1409] font-mono text-[12px] font-semibold tracking-[.02em] cursor-pointer"
+        >
+          {if @editing == :new, do: "Create", else: "Save"}
+        </button>
+      </div>
+    </form>
     """
   end
 end

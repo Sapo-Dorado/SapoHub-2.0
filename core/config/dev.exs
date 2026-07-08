@@ -1,5 +1,23 @@
 import Config
 
+# Enabled modules are separate OTP apps pulled in as path deps (see
+# mix.exs's module_deps/0) — Phoenix's code_reloader and live_reload only
+# know about :sapo_core's own paths by default, so a module's .ex/.heex
+# edits would silently never recompile or trigger a browser refresh in
+# dev without explicitly opting each module's app/path in below. This is
+# core infrastructure every module needs, not something a module should
+# have to wire up itself — computed once here from the same
+# config/modules.lock.exs that mix.exs and `mix sapo.gen.*` already treat
+# as the source of truth for the enabled module set.
+{sapohub_modules, _binding} = Code.eval_file(Path.join(__DIR__, "modules.lock.exs"))
+sapohub_module_apps = Enum.map(sapohub_modules, fn {app, _path} -> app end)
+
+sapohub_module_live_reload_patterns =
+  Enum.map(sapohub_modules, fn {_app, path} ->
+    lib_dir = Path.expand(Path.join(path, "lib"), __DIR__)
+    ~r"#{Regex.escape(lib_dir)}/.*\.(ex|heex)$"
+  end)
+
 # Module file storage root (dirs auto-created at boot; snapshotted in M5).
 config :sapo_core, storage_root: Path.expand("../tmp/storage", __DIR__)
 
@@ -39,6 +57,7 @@ config :sapo_core, SapoCoreWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: String.to_integer(System.get_env("PORT") || "4000")],
   check_origin: false,
   code_reloader: true,
+  reloadable_apps: [:sapo_core | sapohub_module_apps],
   debug_errors: true,
   secret_key_base: "1OVTk1RzFZ8X4VF+/MoWFCChyVZMlZjsC6rO6GobF2OsZi/+BQJPuFeKBBefUiF8",
   watchers: [
@@ -73,10 +92,11 @@ config :sapo_core, SapoCoreWeb.Endpoint,
 config :sapo_core, SapoCoreWeb.Endpoint,
   live_reload: [
     web_console_logger: true,
-    patterns: [
-      ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",
-      ~r"lib/sapo_core_web/(?:controllers|live|components|router)/?.*\.(ex|heex)$"
-    ]
+    patterns:
+      [
+        ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",
+        ~r"lib/sapo_core_web/(?:controllers|live|components|router)/?.*\.(ex|heex)$"
+      ] ++ sapohub_module_live_reload_patterns
   ]
 
 # Enable dev routes for dashboard and mailbox

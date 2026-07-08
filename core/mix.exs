@@ -93,8 +93,9 @@ defmodule SapoCore.MixProject do
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "sapo.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind sapo_core", "esbuild sapo_core"],
+      "assets.build": ["compile", "sapo.gen.hooks", "tailwind sapo_core", "esbuild sapo_core"],
       "assets.deploy": [
+        "sapo.gen.hooks",
         "tailwind sapo_core --minify",
         "esbuild sapo_core --minify",
         "phx.digest"
