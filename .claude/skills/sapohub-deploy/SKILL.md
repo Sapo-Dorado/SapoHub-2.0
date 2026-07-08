@@ -77,7 +77,19 @@ Preconditions to check with the user before running it:
    at the end, already seeded onto the target either way).
 4. Whether they have a Tailscale auth key to seed
    (`--tailscale-auth-key-file`) for unattended tailnet join, or would
-   rather run `tailscale up` by hand after bootstrap.
+   rather run `tailscale up` by hand after bootstrap. This is the one
+   genuinely one-time, per-machine manual step even on the fully
+   scripted fresh-machine path — `lib.mkFreshMachine` enables
+   `services.tailscale` and a `tailscale-autoconnect` unit, but joining
+   an ACCOUNT's tailnet needs either an auth key (generate one at
+   https://login.tailscale.com/admin/settings/keys, save it to a file,
+   pass `--tailscale-auth-key-file <path>` — the script seeds it to
+   `/etc/sapohub/tailscale-authkey` and the autoconnect unit picks it up
+   on first boot, no login prompt) or an interactive `ssh root@<ip>
+   tailscale up` afterward (prints a URL to open and approve in a
+   browser). Either way it's once per machine — Tailscale state persists
+   in `/var/lib/tailscale` across every future `nixos-rebuild`/redeploy,
+   it doesn't need repeating.
 
 The script asks for IP re-confirmation immediately before the
 destructive nixos-anywhere run — don't route around that by scripting
@@ -101,6 +113,12 @@ repartitions from scratch each time, and the hardware-config/disk-device
 override files get regenerated fresh on every run.
 
 ## Path 2: existing NixOS config
+
+Networking (Tailscale, firewall) is NOT part of `services.sapohub` — it
+only exists in `lib.mkFreshMachine` (Path 1). An existing machine keeps
+whatever networking it already has; don't add Tailscale config for the
+user unless they ask for it separately, and don't assume it's there if
+it isn't.
 
 Two ways to do this, in order of preference:
 
