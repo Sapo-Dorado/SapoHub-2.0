@@ -65,6 +65,7 @@ in
 
     secretsFile = mkOption {
       type = types.path;
+      default = "/etc/sapohub/secrets.env";
       description = ''
         Root-owned env file with SECRET_KEY_BASE and any module secrets
         (validated at boot; module secrets degrade gracefully).
@@ -127,11 +128,17 @@ in
     deploy = {
       flakePath = mkOption {
         type = types.str;
+        default = "/etc/sapohub-config";
         description = "Path of the user-config flake checkout (a git repo).";
       };
       flakeAttr = mkOption {
         type = types.str;
-        description = "nixosConfigurations attribute to rebuild.";
+        description = ''
+          nixosConfigurations attribute to rebuild. No universal default is
+          possible — every config repo names its own hosts (the fresh-machine
+          path uses the hostname; a spliced-into-existing-config setup uses
+          whatever that config already calls itself). Always set explicitly.
+        '';
       };
     };
   };

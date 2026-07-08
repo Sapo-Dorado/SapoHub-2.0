@@ -102,10 +102,34 @@ override files get regenerated fresh on every run.
 
 ## Path 2: existing NixOS config
 
-Read `examples/user-config/flake.nix` in full — its header comment and
-`sapohubModulesForHost` list are the actual content to work from. The
-task is: help the user add `sapohub.nixosModules.default` plus a
-`services.sapohub = { ... }` block into THEIR existing
+Two ways to do this, in order of preference:
+
+**2a. The user already has (or is willing to make) their own personal
+config repo with a `nixosModules.default` output** — e.g. one built the
+way `sapohub-config` (see `examples/README.md` for how such a repo is
+structured) exposes its own module. In that case adding SapoHub to an
+existing NixOS config is just:
+1. Add their config repo as a flake input in their existing config.
+2. Append `<their-config-repo>.nixosModules.default` to the target
+   `nixosConfigurations.<host>`'s `modules` list.
+3. Set `services.sapohub.deploy.flakeAttr = "<host>";` — this is the one
+   thing that can never have a sensible default (every config names its
+   own host attribute), so it must always be set explicitly wherever the
+   module gets imported. Everything else the module needs
+   (`secretsFile`, `deploy.flakePath`) already defaults sensibly from
+   SapoHub-2.0's own `nix/nixos-module.nix` — nothing to restate.
+4. They run `nixos-rebuild switch --flake .#<host>` themselves.
+
+This is the pattern to steer toward if the user is setting up a config
+repo from scratch anyway — it means their personal config repo can be
+imported into any number of existing machines' configs with a single
+line, no `services.sapohub = { ... }` block required at all.
+
+**2b. Manual splice, no separate config repo** — read
+`examples/user-config/flake.nix` in full; its header comment and
+`sapohubModulesForHost` list are the actual content to work from. Help
+the user add `sapohub.nixosModules.default` plus a
+`services.sapohub = { ... }` block directly into THEIR existing
 `nixosConfigurations.<their-host>`'s `modules` list, without touching
 their `fileSystems`, `boot.loader`, or hardware config.
 
@@ -120,17 +144,25 @@ Concretely, this means:
 4. Append `sapohub.nixosModules.default`, a `./sapohub-prefs.nix` import
    (copy the empty-stub file from `examples/user-config/sapohub-prefs.nix`
    into their repo first — commit it before the first
-   `nixos-rebuild switch`, not after), and the `services.sapohub = {...}`
+   `nixos-rebuild switch`, not after), and a `services.sapohub = {...}`
    block into their EXISTING `nixosConfigurations.<host>`'s `modules`
-   list — don't create a new nixosConfigurations output.
-5. Point `deploy.flakePath` at wherever their config repo will live ON
-   the target machine, and `deploy.flakeAttr` at their actual
-   `nixosConfigurations` attribute name (not `"hub"` unless that's
-   genuinely what they called it).
-6. They run `nixos-rebuild switch --flake .#<their-attr>` themselves
+   list — don't create a new nixosConfigurations output. Only set values
+   the user actually needs to override; `secretsFile` and
+   `deploy.flakePath` already default sensibly and don't need restating.
+   `deploy.flakeAttr` still must be set explicitly (see above).
+5. They run `nixos-rebuild switch --flake .#<their-attr>` themselves
    (or however they normally deploy their own config) — this skill
    doesn't run destructive commands against a machine you don't know
    the topology of.
+
+Whichever sub-path is used, never invent option DEFAULTS inside a
+downstream config repo or a one-off splice — if a value seems like it
+should have a universally sensible default, that belongs as a real
+`default = ...` on the option itself in `nix/nixos-module.nix` (or
+whatever module owns it), not baked into every config that imports it.
+A config repo's own module should only ever *set* values that are
+genuinely specific to it (module selection, unfree-overlay wiring for
+`assistant.claudePackage`, etc.).
 
 ## Customizing an install (either path)
 
