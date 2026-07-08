@@ -165,6 +165,20 @@ in
         '';
       };
     };
+
+    nginx = {
+      enable = mkEnableOption ''
+        nginx on this box. Off by default — SapoHub's own app port is
+        reachable directly over Tailscale, no reverse proxy required for
+        the app itself. This is the prerequisite for the (upcoming)
+        dev-session proxy slots feature (see sapo-hub v1's
+        SapoHub.DevSessions / devSlots* options for the pattern this will
+        follow: fixed nginx-fronted external ports mapped to internal
+        ports dev servers bind to). For now, enabling this just turns on
+        an otherwise-unconfigured `services.nginx` — nothing proxies
+        through it yet.
+      '';
+    };
   };
 
   config = mkIf cfg.enable (
@@ -291,6 +305,14 @@ in
           fi
         '';
       };
+
+      # ── Optional: nginx ────────────────────────────────────────────────────
+      # Bare enable for now — no virtualHosts wired up. This exists as the
+      # prerequisite for the upcoming dev-session proxy slots feature; it
+      # doesn't front the main app (which is already reachable directly
+      # over Tailscale) and adds nothing on its own beyond the running
+      # service.
+      services.nginx.enable = mkIf cfg.nginx.enable true;
     }
   );
 }
