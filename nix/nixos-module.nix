@@ -379,7 +379,13 @@ in
       # Generate a short-lived self-signed placeholder here (idempotent —
       # only if missing) so nginx never fails to start on that account;
       # worst case is a browser warning until the real cert lands.
-      systemd.services.nginx.preStart = mkIf cfg.nginx.https (mkAfter ''
+      #
+      # MUST run via mkBefore, not mkAfter: NixOS's own nginx module
+      # preStart ends with `nginx -t` (config test), which fails outright
+      # if sslCertificate/sslCertificateKey don't exist on disk yet —
+      # mkAfter would append this placeholder-generation AFTER that test
+      # already failed, so nginx would never start. mkBefore runs it first.
+      systemd.services.nginx.preStart = mkIf cfg.nginx.https (mkBefore ''
         mkdir -p ${tlsDir}
         if [ ! -s ${tlsCertFile} ] || [ ! -s ${tlsKeyFile} ]; then
           ${pkgs.openssl}/bin/openssl req -x509 -nodes -newkey rsa:2048 \
