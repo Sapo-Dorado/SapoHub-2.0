@@ -366,7 +366,12 @@ in
           sslCertificate = mkIf cfg.nginx.https tlsCertFile;
           sslCertificateKey = mkIf cfg.nginx.https tlsKeyFile;
           locations."/" = {
-            proxyPass = "http://127.0.0.1:${toString cfg.port}";
+            # BIND_IP=loopback (set above whenever nginx.enable is true)
+            # binds the app to the IPv6 loopback address ([::1]) — Bandit's
+            # {0,0,0,0,0,0,0,1} tuple, not dual-stack — so proxying to the
+            # IPv4 127.0.0.1 here would get connection-refused even though
+            # the app is up. Must match the same address family it's bound to.
+            proxyPass = "http://[::1]:${toString cfg.port}";
             proxyWebsockets = true;
           };
         };
