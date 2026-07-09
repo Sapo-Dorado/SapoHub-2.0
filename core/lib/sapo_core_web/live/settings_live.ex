@@ -39,7 +39,7 @@ defmodule SapoCoreWeb.SettingsLive do
        page_title: "settings",
        deploy_session_id: @deploy_session,
        snapshots: Snapshot.list(),
-       secrets: SapoCore.Secrets.status(),
+       secrets: secrets(),
        modules:
          Enum.map(Registry.modules(), &%{id: &1.id(), title: &1.title(), version: &1.version()}),
        module_tabs: module_tabs,
@@ -83,6 +83,15 @@ defmodule SapoCoreWeb.SettingsLive do
   # error buried in the terminal output.
   defp github_token_set? do
     (System.get_env("GITHUB_TOKEN") || "") != ""
+  end
+
+  # SapoCore.Secrets.status/0 only covers module-declared secrets
+  # (core_secrets + each module's required_secrets/0) — GITHUB_TOKEN is
+  # deploy infrastructure, not owned by any module, so it's appended
+  # here to keep the Settings page's Secrets table complete.
+  defp secrets do
+    SapoCore.Secrets.status() ++
+      [%{var: "GITHUB_TOKEN", required_by: :deploy, set?: github_token_set?()}]
   end
 
   defp dashboard_order do
@@ -171,12 +180,7 @@ defmodule SapoCoreWeb.SettingsLive do
     else
       # Belt-and-suspenders: the button is already disabled/hidden from
       # this state client-side, but don't trust that alone.
-      {:noreply,
-       put_flash(
-         socket,
-         :error,
-         "GITHUB_TOKEN isn't set in the secrets file — can't deploy until it is."
-       )}
+      {:noreply, put_flash(socket, :error, "Requires the GITHUB_TOKEN secret.")}
     end
   end
 
@@ -286,11 +290,7 @@ defmodule SapoCoreWeb.SettingsLive do
               <button
                 phx-click="deploy"
                 disabled={@deploy_running or not @deploy_secret_ready}
-                title={
-                  if @deploy_secret_ready,
-                    do: nil,
-                    else: "GITHUB_TOKEN not set in the secrets file — see below"
-                }
+                title={if @deploy_secret_ready, do: nil, else: "Requires the GITHUB_TOKEN secret"}
                 class="px-[18px] py-[9px] rounded-[4px] bg-[#E0A458] text-[#1A1206] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#e8b370] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
               >
                 {if @deploy_running, do: "Deploying…", else: "Deploy latest"}
@@ -300,8 +300,7 @@ defmodule SapoCoreWeb.SettingsLive do
               </span>
             </div>
             <p :if={not @deploy_secret_ready} class="px-4 pb-4 text-[12px] font-mono text-[#E0A458]">
-              Deploy is disabled: GITHUB_TOKEN isn't set in the secrets file, so a config-repo
-              push (from syncing UI preferences) would fail partway through.
+              Requires the GITHUB_TOKEN secret.
             </p>
 
             <details>
