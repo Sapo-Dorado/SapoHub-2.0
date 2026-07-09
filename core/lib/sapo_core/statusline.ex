@@ -42,6 +42,17 @@ defmodule SapoCore.Statusline do
     SapoCore.Prefs.put("statusline_order", Enum.map_join(ids, ",", &to_string/1))
   end
 
+  @doc """
+  Whether the `"statusline_order"` pref is set — i.e. whether per-item
+  `statusline.<id>` toggles are currently being ignored in favor of an
+  explicit order/selection. Settings should reflect actual visibility
+  from `enabled_items/0` (not the raw per-item toggle) whenever this is
+  true, and should treat those toggles as inert.
+  """
+  def order_active? do
+    order_ids() != []
+  end
+
   @doc "All PubSub topics the enabled items listen on."
   def topics do
     enabled_items() |> Enum.flat_map(& &1.topics) |> Enum.uniq()

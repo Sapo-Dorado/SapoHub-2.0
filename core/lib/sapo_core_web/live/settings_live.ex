@@ -47,6 +47,7 @@ defmodule SapoCoreWeb.SettingsLive do
        button_choices: button_choices(),
        dashboard_order: dashboard_order(),
        statusline_options: statusline_options(),
+       statusline_order_active: SapoCore.Statusline.order_active?(),
        saving: false,
        deploy_running: CommandSession.alive?(@deploy_session)
      )}
@@ -79,11 +80,13 @@ defmodule SapoCoreWeb.SettingsLive do
   end
 
   defp statusline_options do
+    shown_ids = SapoCore.Statusline.enabled_items() |> MapSet.new(& &1.id)
+
     for item <- SapoCore.Statusline.all_items() do
       %{
         id: item.id,
         label: item.label,
-        enabled: SapoCore.Prefs.get("statusline.#{item.id}", true)
+        enabled: MapSet.member?(shown_ids, item.id)
       }
     end
   end
@@ -114,9 +117,17 @@ defmodule SapoCoreWeb.SettingsLive do
   end
 
   def handle_event("toggle_statusline_item", %{"id" => id}, socket) do
-    current = SapoCore.Prefs.get("statusline.#{id}", true)
-    :ok = SapoCore.Prefs.put("statusline.#{id}", !current)
-    {:noreply, assign(socket, statusline_options: statusline_options())}
+    if socket.assigns.statusline_order_active do
+      # An explicit "statusline_order" pref is active and takes full
+      # precedence over per-item toggles (see SapoCore.Statusline
+      # moduledoc) — flipping one here would silently do nothing, so
+      # don't even write it while the override is in effect.
+      {:noreply, socket}
+    else
+      current = SapoCore.Prefs.get("statusline.#{id}", true)
+      :ok = SapoCore.Prefs.put("statusline.#{id}", !current)
+      {:noreply, assign(socket, statusline_options: statusline_options())}
+    end
   end
 
   # ── Snapshot ───────────────────────────────────────────────────────────────
@@ -357,6 +368,10 @@ defmodule SapoCoreWeb.SettingsLive do
 
         <section>
           <.eyebrow>Statusline</.eyebrow>
+          <p :if={@statusline_order_active} class="text-[12px] text-[#86948F] mb-2 font-mono">
+            An explicit order override ("statusline_order") is active — it controls what's shown
+            below, and these per-item toggles are inert until it's cleared.
+          </p>
           <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
             <table class="w-full text-[13.5px]">
               <tr :for={opt <- @statusline_options} class="border-t first:border-t-0 border-[#242D31]">
@@ -366,8 +381,13 @@ defmodule SapoCoreWeb.SettingsLive do
                   <button
                     phx-click="toggle_statusline_item"
                     phx-value-id={opt.id}
+                    disabled={@statusline_order_active}
                     class={[
-                      "font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border cursor-pointer",
+                      "font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border",
+                      if(@statusline_order_active,
+                        do: "cursor-not-allowed opacity-50",
+                        else: "cursor-pointer"
+                      ),
                       if(opt.enabled,
                         do: "text-[#7FB069] border-[#3C5934]",
                         else: "text-[#86948F] border-[#242D31]"
