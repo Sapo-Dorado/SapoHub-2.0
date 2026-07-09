@@ -231,13 +231,54 @@ ORIGIN_URL="$(git -C "$FLAKE_PATH" remote get-url origin 2>/dev/null || true)"
 if [ -n "$ORIGIN_URL" ]; then
   echo ""
   echo "waiting for the target to come back up after install..."
+  # The target reboots from the temporary kexec-installer environment into
+  # its real, final NixOS system — which generates its own permanent host
+  # key, different from whatever ephemeral key the installer environment
+  # was using. That's an EXPECTED key change, not tampering, but ssh (even
+  # with StrictHostKeyChecking=accept-new, which only auto-trusts hosts it
+  # has never seen before) will refuse to reconnect once an entry exists
+  # and looks different. Drop any entry recorded during the kexec/install
+  # phases now, so the reconnect below gets a clean accept-new instead of
+  # silently failing every retry and only surfacing as a confusing error
+  # later, at the git clone step.
+  ssh-keygen -R "$TARGET_IP" >/dev/null 2>&1 || true
+  RECONNECTED=""
   for _ in $(seq 1 30); do
-    ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 "${SSH_USER}@${TARGET_IP}" true 2>/dev/null && break
+    if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 "${SSH_USER}@${TARGET_IP}" true 2>/dev/null; then
+      RECONNECTED="1"
+      break
+    fi
     sleep 5
   done
-  echo "cloning ${ORIGIN_URL} to /etc/sapohub-config on the target (for future sapohub-deploy redeploys)..."
-  ssh -o StrictHostKeyChecking=accept-new "${SSH_USER}@${TARGET_IP}" \
-    "git clone '${ORIGIN_URL}' /etc/sapohub-config 2>&1 || echo 'clone failed — see below'"
+  if [ -z "$RECONNECTED" ]; then
+    echo "NOTE: couldn't reconnect to ${TARGET_IP} after reboot within 150s — it may still be coming up." >&2
+    echo "sapohub-deploy (future redeploys) expects a git checkout at /etc/sapohub-config — seed it by hand once it's reachable:" >&2
+    echo "  ssh ${SSH_USER}@${TARGET_IP} git clone <your-repo-url> /etc/sapohub-config" >&2
+  else
+    # Cloning happens ON THE TARGET, using the target's own credentials —
+    # which, unlike this machine, it doesn't have any of. An SSH-form
+    # GitHub URL (git@github.com:owner/repo) would need a deploy key we
+    # never provisioned, and would also hit the same "new host, unknown
+    # key" friction against github.com's host key from the target's own
+    # known_hosts (empty, fresh machine). Rewrite it to HTTPS when
+    # possible so the clone doesn't need any credentials or host-key trust
+    # at all — this works as long as the repo is public; bring your own
+    # credentials on the target if it's private.
+    CLONE_URL="$ORIGIN_URL"
+    case "$ORIGIN_URL" in
+      git@github.com:*)
+        CLONE_URL="https://github.com/${ORIGIN_URL#git@github.com:}" ;;
+      ssh://git@github.com/*)
+        CLONE_URL="https://github.com/${ORIGIN_URL#ssh://git@github.com/}" ;;
+    esac
+    echo "cloning ${CLONE_URL} to /etc/sapohub-config on the target (for future sapohub-deploy redeploys)..."
+    if ! ssh -o StrictHostKeyChecking=accept-new "${SSH_USER}@${TARGET_IP}" \
+      "nix --extra-experimental-features 'nix-command flakes' shell nixpkgs#git -c git clone '${CLONE_URL}' /etc/sapohub-config"; then
+      echo "NOTE: clone failed on the target (private repo without credentials there? wrong URL?)." >&2
+      echo "sapohub-deploy (future redeploys) expects a git checkout at /etc/sapohub-config — seed it by hand:" >&2
+      echo "  ssh ${SSH_USER}@${TARGET_IP} git clone <your-repo-url> /etc/sapohub-config" >&2
+    fi
+  fi
 else
   echo ""
   echo "NOTE: ${FLAKE_PATH} has no 'origin' remote, so I couldn't seed /etc/sapohub-config on the target automatically."
