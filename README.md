@@ -97,6 +97,29 @@ Pass `--secrets-file <path>` to bring your own instead (useful once you
 have module secrets beyond just `SECRET_KEY_BASE` — Telegram bot tokens,
 etc. — see each module's docs for what it expects in that file).
 
+One core (non-module) secret worth knowing about: `GITHUB_TOKEN`,
+optional, used only by `sapohub-deploy --sync-prefs` (the Settings
+page's Deploy button) to push the config-repo commit it makes when
+syncing UI preferences back into git. Without it, that commit still
+happens locally, it just can't push — the Settings page's Secrets
+table flags it "missing" and disables Deploy until it's set. Generate
+a **fine-grained personal access token** (not classic — classic tokens
+are all-or-nothing across every repo you can access, more than this
+needs):
+
+1. GitHub → Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → Generate new token
+2. **Repository access**: "Only select repositories" → your config
+   repo (e.g. `SapoHub-Config`) — nothing else
+3. **Permissions**: Repository permissions → **Contents: Read and
+   write** (this alone is enough to `git push`; leave everything else
+   at "No access")
+4. Add an expiration you're comfortable renewing on
+
+Add it to the secrets file as `GITHUB_TOKEN=<token>`, same as any other
+line in that file (root-only, never committed, never in the Nix
+store).
+
 **Tailscale**: pass `--tailscale-auth-key-file <path>` (a file containing
 a Tailscale auth key) to have the machine join your tailnet unattended on
 first boot. Without it, SSH in after bootstrap and run `tailscale up`

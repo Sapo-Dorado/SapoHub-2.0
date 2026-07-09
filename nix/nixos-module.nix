@@ -73,7 +73,10 @@ in
         by sapohub-deploy (as root, since this file is root-only) for
         GITHUB_TOKEN — used to push the config-repo commit made by
         `sapohub-deploy --sync-prefs`. Optional: without it, --sync-prefs
-        still commits locally, it just can't push.
+        still commits locally, it just can't push. See the README's
+        "Secrets" section for what kind of token to generate (a
+        fine-grained PAT scoped to just the config repo, Contents:
+        Read and write) and how to add it.
       '';
     };
 
