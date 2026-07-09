@@ -48,6 +48,7 @@ defmodule SapoCoreWeb.SettingsLive do
        dashboard_order: dashboard_order(),
        statusline_options: statusline_options(),
        statusline_order_active: SapoCore.Statusline.order_active?(),
+       deploy_secret_ready: github_token_set?(),
        saving: false,
        deploy_running: CommandSession.alive?(@deploy_session)
      )}
@@ -71,6 +72,17 @@ defmodule SapoCoreWeb.SettingsLive do
         selected: SapoCore.Prefs.get("dashboard_button.#{mod.id()}", "default")
       }
     end
+  end
+
+  # The Settings "Deploy" button always passes --sync-prefs (see
+  # deploy_cmd in runtime.exs), which pushes a config-repo commit
+  # whenever there's a pending UI-preference overlay to sync. That push
+  # needs GITHUB_TOKEN in the secrets file (nix/deploy-script.nix) — no
+  # token means sapohub-deploy would commit locally but fail to push.
+  # Gate the button on it up front rather than let people hit a git
+  # error buried in the terminal output.
+  defp github_token_set? do
+    (System.get_env("GITHUB_TOKEN") || "") != ""
   end
 
   defp dashboard_order do
@@ -145,15 +157,26 @@ defmodule SapoCoreWeb.SettingsLive do
   # ── Deploy ─────────────────────────────────────────────────────────────────
 
   def handle_event("deploy", _params, socket) do
-    {cmd, args} = Application.fetch_env!(:sapo_core, :deploy_cmd)
+    if socket.assigns.deploy_secret_ready do
+      {cmd, args} = Application.fetch_env!(:sapo_core, :deploy_cmd)
 
-    case SessionSupervisor.start_command(@deploy_session, cmd, args) do
-      {:ok, _pid} ->
-        {:noreply, assign(socket, deploy_running: true)}
+      case SessionSupervisor.start_command(@deploy_session, cmd, args) do
+        {:ok, _pid} ->
+          {:noreply, assign(socket, deploy_running: true)}
 
-      {:error, reason} ->
-        Logger.error("deploy start failed: #{inspect(reason)}")
-        {:noreply, put_flash(socket, :error, "Deploy failed to start: #{inspect(reason)}")}
+        {:error, reason} ->
+          Logger.error("deploy start failed: #{inspect(reason)}")
+          {:noreply, put_flash(socket, :error, "Deploy failed to start: #{inspect(reason)}")}
+      end
+    else
+      # Belt-and-suspenders: the button is already disabled/hidden from
+      # this state client-side, but don't trust that alone.
+      {:noreply,
+       put_flash(
+         socket,
+         :error,
+         "GITHUB_TOKEN isn't set in the secrets file — can't deploy until it is."
+       )}
     end
   end
 
@@ -262,7 +285,12 @@ defmodule SapoCoreWeb.SettingsLive do
               </button>
               <button
                 phx-click="deploy"
-                disabled={@deploy_running}
+                disabled={@deploy_running or not @deploy_secret_ready}
+                title={
+                  if @deploy_secret_ready,
+                    do: nil,
+                    else: "GITHUB_TOKEN not set in the secrets file — see below"
+                }
                 class="px-[18px] py-[9px] rounded-[4px] bg-[#E0A458] text-[#1A1206] text-[12.5px] font-mono font-semibold tracking-[.03em] hover:bg-[#e8b370] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
               >
                 {if @deploy_running, do: "Deploying…", else: "Deploy latest"}
@@ -271,6 +299,10 @@ defmodule SapoCoreWeb.SettingsLive do
                 Deploy rebuilds from GitHub and restarts the hub — output streams below.
               </span>
             </div>
+            <p :if={not @deploy_secret_ready} class="px-4 pb-4 text-[12px] font-mono text-[#E0A458]">
+              Deploy is disabled: GITHUB_TOKEN isn't set in the secrets file, so a config-repo
+              push (from syncing UI preferences) would fail partway through.
+            </p>
 
             <details>
               <summary class="px-4 py-[11px] border-t border-[#242D31] font-mono text-xs text-[#86948F] cursor-pointer hover:text-[#E6ECE9] select-none">
