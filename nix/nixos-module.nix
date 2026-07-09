@@ -265,6 +265,18 @@ in
           # interface — trust doesn't matter if we're simply not
           # listening there).
           BIND_IP = if cfg.nginx.enable then "loopback" else "any";
+          # Phoenix's default check_origin compares the request Origin
+          # against config :url, [host: ...] — which is cfg.host, and
+          # stays at its "localhost" default here since the box's real
+          # address is a Tailscale MagicDNS name assigned at join time,
+          # not knowable at eval time. Without this, every LiveView
+          # socket connect gets rejected ("Could not check origin") and
+          # the client falls back to endless longpoll reconnect attempts.
+          # Safe to widen to any *.ts.net origin: this box is only
+          # reachable at all from inside the same tailnet already (see
+          # nginx.enable's loopback-only BIND_IP above), so any peer that
+          # could spoof that Origin header already has network access.
+          CHECK_ORIGIN = optionalString cfg.tailscale.enable "//*.ts.net";
           DATABASE_PATH = "${cfg.stateDir}/db/sapohub.db";
           STORAGE_ROOT = storageRoot;
           SNAPSHOTS_DIR = "${cfg.stateDir}/snapshots";

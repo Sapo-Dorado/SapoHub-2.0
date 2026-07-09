@@ -110,8 +110,23 @@ if config_env() == :prod do
 
   config :sapo_core, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  # check_origin defaults to comparing the socket's Origin header against
+  # url: [host: ...] above — fine for a fixed domain, but wrong whenever
+  # the real access hostname isn't knowable at build time (e.g. a
+  # Tailscale MagicDNS name assigned at join time). CHECK_ORIGIN (set by
+  # the nix module when services.sapohub.tailscale.enable is true) widens
+  # this to a comma-separated list of Phoenix check_origin patterns
+  # instead, e.g. "//*.ts.net". Unset/empty falls back to the default
+  # host-based check, matching prior behavior.
+  check_origin =
+    case System.get_env("CHECK_ORIGIN") do
+      origins when origins in [nil, ""] -> true
+      origins -> String.split(origins, ",")
+    end
+
   config :sapo_core, SapoCoreWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
+    check_origin: check_origin,
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
