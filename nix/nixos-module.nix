@@ -172,15 +172,43 @@ in
         default = true;
         description = ''
           Run nginx in front of the app, listening on port 80 and
-          proxying to the app's own port on 127.0.0.1 (the app itself is
-          unaffected and still listens directly there too). On by
-          default so the app is reachable at `http://<host>` with no
-          port in the URL. Also the prerequisite for an (upcoming)
-          dev-session proxy slots feature, which will add further
-          nginx-fronted ports here (see sapo-hub v1's
+          proxying to the app's own port on 127.0.0.1. On by default so
+          the app is reachable at `http://<host>` with no port in the
+          URL. Also, whenever this is on, the app itself is switched to
+          binding 127.0.0.1/::1 ONLY (BIND_IP=loopback) — nginx becomes
+          the sole path in, there's no direct-port fallback reachable
+          over Tailscale or any other interface. Set this to false if
+          you want the app reachable directly on its own port instead
+          (e.g. no nginx at all). Also the prerequisite for an
+          (upcoming) dev-session proxy slots feature, which will add
+          further nginx-fronted ports here (see sapo-hub v1's
           SapoHub.DevSessions / devSlots* options for the pattern that'll
           follow: fixed nginx-fronted external ports mapped to internal
           ports dev servers bind to).
+        '';
+      };
+
+      https = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Also serve HTTPS on 443, using a cert Tailscale issues for
+          this machine's MagicDNS name (via `tailscale cert`), kept
+          fresh by a daily renewal timer (systemd unit
+          sapohub-tailscale-cert). HTTP on 80 redirects to HTTPS once
+          this is on.
+
+          Two one-time prerequisites, neither doable from Nix/CLI:
+            1. services.sapohub.tailscale.enable = true — the cert is
+               issued for THIS machine's tailnet hostname, so it needs
+               to actually be joined to one.
+            2. "HTTPS Certificates" turned on for your tailnet, in the
+               Tailscale admin console (DNS tab) — a manual, one-time,
+               whole-tailnet setting.
+          Until both are true, the renewal service's `tailscale cert`
+          call keeps failing harmlessly (logged, not fatal) — nginx
+          still starts and serves HTTPS with a self-signed placeholder
+          cert (browsers will warn) until the real one is fetched.
         '';
       };
     };
@@ -191,6 +219,9 @@ in
       storageRoot = if cfg.storageRoot != null then cfg.storageRoot else "${cfg.stateDir}/storage";
       workDir = if cfg.assistant.workDir != null then cfg.assistant.workDir else cfg.stateDir;
       bin = "${cfg.package}/bin/sapo_core";
+      tlsDir = "/var/lib/sapohub-tls";
+      tlsCertFile = "${tlsDir}/fullchain.pem";
+      tlsKeyFile = "${tlsDir}/privkey.pem";
     in
     {
       users.users.sapohub = {
@@ -228,6 +259,12 @@ in
           PHX_SERVER = "true";
           PHX_HOST = cfg.host;
           PORT = toString cfg.port;
+          # nginx.enable means nginx is the sole path in — loopback-only,
+          # no direct-port fallback on any external interface (Tailscale
+          # included, despite tailscale0 being a trusted firewall
+          # interface — trust doesn't matter if we're simply not
+          # listening there).
+          BIND_IP = if cfg.nginx.enable then "loopback" else "any";
           DATABASE_PATH = "${cfg.stateDir}/db/sapohub.db";
           STORAGE_ROOT = storageRoot;
           SNAPSHOTS_DIR = "${cfg.stateDir}/snapshots";
@@ -312,10 +349,12 @@ in
       };
 
       # ── Optional: nginx in front of the app ────────────────────────────────
-      # Listens on 80, proxies to the app's own port on loopback. The app
-      # still binds its own port directly too (unaffected) — this just adds
-      # a no-port-in-the-URL path in over Tailscale, and gives future
-      # dev-session proxy slots a home in the same vhost/service.
+      # Listens on 80 (and 443 if nginx.https), proxies to the app's own
+      # port on loopback. Whenever this is on, the app itself is bound
+      # loopback-only (BIND_IP=loopback, set above) — nginx is the sole
+      # path in, not an addition alongside a still-reachable app port.
+      # Also gives future dev-session proxy slots a home in the same
+      # vhost/service.
       services.nginx = mkIf cfg.nginx.enable {
         enable = true;
         recommendedProxySettings = true;
@@ -323,10 +362,68 @@ in
 
         virtualHosts.${cfg.host} = {
           default = true;
+          forceSSL = cfg.nginx.https;
+          sslCertificate = mkIf cfg.nginx.https tlsCertFile;
+          sslCertificateKey = mkIf cfg.nginx.https tlsKeyFile;
           locations."/" = {
             proxyPass = "http://127.0.0.1:${toString cfg.port}";
             proxyWebsockets = true;
           };
+        };
+      };
+
+      # nginx.https needs SOME cert/key pair at tlsCertFile/tlsKeyFile
+      # before nginx will even start — the real one only shows up once
+      # sapohub-tailscale-cert (below) succeeds, which needs the box to
+      # already be joined to a tailnet with HTTPS Certificates turned on.
+      # Generate a short-lived self-signed placeholder here (idempotent —
+      # only if missing) so nginx never fails to start on that account;
+      # worst case is a browser warning until the real cert lands.
+      systemd.services.nginx.preStart = mkIf cfg.nginx.https (mkAfter ''
+        mkdir -p ${tlsDir}
+        if [ ! -s ${tlsCertFile} ] || [ ! -s ${tlsKeyFile} ]; then
+          ${pkgs.openssl}/bin/openssl req -x509 -nodes -newkey rsa:2048 \
+            -keyout ${tlsKeyFile} -out ${tlsCertFile} -days 1 \
+            -subj "/CN=${cfg.host}"
+        fi
+      '');
+
+      # Fetches (and, on a timer, renews) the real cert Tailscale issues
+      # for this machine's MagicDNS name. Never fatal if it fails — logs
+      # why and leaves nginx on whatever cert it already had (placeholder
+      # or a previous real one).
+      systemd.services.sapohub-tailscale-cert = mkIf cfg.nginx.https {
+        description = "Fetch/renew this machine's Tailscale HTTPS cert for nginx";
+        after = [ "tailscaled.service" ];
+        path = [ pkgs.tailscale pkgs.jq pkgs.coreutils ];
+        serviceConfig.Type = "oneshot";
+        script = ''
+          dnsname="$(tailscale status --json | jq -r '.Self.DNSName // empty' | sed 's/\.$//')"
+          if [ -z "$dnsname" ]; then
+            echo "not joined to a tailnet yet (or DNSName unavailable) — skipping cert fetch"
+            exit 0
+          fi
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          if tailscale cert --cert-file "$tmp/fullchain.pem" --key-file "$tmp/privkey.pem" "$dnsname"; then
+            mkdir -p ${tlsDir}
+            install -m 600 "$tmp/fullchain.pem" ${tlsCertFile}
+            install -m 600 "$tmp/privkey.pem" ${tlsKeyFile}
+            systemctl reload nginx.service || true
+            echo "renewed HTTPS cert for $dnsname"
+          else
+            echo "tailscale cert failed — is 'HTTPS Certificates' enabled for this tailnet? (admin console > DNS). nginx keeps using its previous/placeholder cert."
+          fi
+        '';
+      };
+
+      systemd.timers.sapohub-tailscale-cert = mkIf cfg.nginx.https {
+        description = "Periodic Tailscale HTTPS cert renewal for nginx";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "2m";
+          OnUnitActiveSec = "24h";
+          Persistent = true;
         };
       };
     }

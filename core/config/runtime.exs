@@ -97,6 +97,17 @@ if config_env() == :prod do
   host = System.get_env("PHX_HOST") || "example.com"
   port = String.to_integer(System.get_env("PORT") || "4000")
 
+  # BIND_IP=loopback restricts the app to 127.0.0.1/::1 — set by the NixOS
+  # module whenever services.sapohub.nginx.enable is true, so nginx is the
+  # only path in (over Tailscale or otherwise) and the app's own port never
+  # answers on any external interface. Defaults to all-interfaces, matching
+  # the Phoenix generator default, for anyone running without nginx in front.
+  bind_ip =
+    case System.get_env("BIND_IP") do
+      "loopback" -> {0, 0, 0, 0, 0, 0, 0, 1}
+      _ -> {0, 0, 0, 0, 0, 0, 0, 0}
+    end
+
   config :sapo_core, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :sapo_core, SapoCoreWeb.Endpoint,
@@ -106,7 +117,7 @@ if config_env() == :prod do
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
       # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
       # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0},
+      ip: bind_ip,
       port: port
     ],
     secret_key_base: secret_key_base

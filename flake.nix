@@ -129,11 +129,16 @@
                 networking.firewall.allowedTCPPorts = [ 22 ];
 
                 # ---- Application ----
-                # Reachable at http://<tailscale-hostname>:4000 once joined —
-                # no domain/TLS needed on a Tailscale-only box. Tailscale
-                # itself (the only network path in; no public exposure) is
-                # services.sapohub.tailscale — same option an existing-config
-                # user can opt into, just defaulted on here.
+                # Reachable at https://<tailscale-hostname> once joined (and,
+                # one time, "HTTPS Certificates" is turned on for the tailnet
+                # in the Tailscale admin console — see services.sapohub.
+                # nginx.https) — no domain/public TLS needed on a
+                # Tailscale-only box. Tailscale itself (the only network path
+                # in; no public exposure) is services.sapohub.tailscale —
+                # same option an existing-config user can opt into, just
+                # defaulted on here. nginx is the sole path in either way:
+                # the app's own port is loopback-only whenever nginx.enable
+                # is true (the default).
                 services.sapohub = {
                   enable = true;
                   package = built.package;
@@ -144,6 +149,7 @@
                     enable = true;
                     authKeyFile = tailscaleAuthKeyFile;
                   };
+                  nginx.https = true;
                   deploy = {
                     flakePath = deployFlakePath;
                     flakeAttr = hostname;
