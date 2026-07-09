@@ -385,6 +385,12 @@ in
       # if sslCertificate/sslCertificateKey don't exist on disk yet —
       # mkAfter would append this placeholder-generation AFTER that test
       # already failed, so nginx would never start. mkBefore runs it first.
+      # nginx.service (including this preStart) runs as User=nginx, not
+      # root — so both writers of this cert/key pair need to leave files
+      # nginx itself can read. This one runs AS nginx, so files it creates
+      # are already nginx:nginx by default; sapohub-tailscale-cert below
+      # runs as root instead (it needs root to read tailscaled's socket),
+      # so it explicitly chowns to nginx:nginx on write — see there.
       systemd.services.nginx.preStart = mkIf cfg.nginx.https (mkBefore ''
         mkdir -p ${tlsDir}
         if [ ! -s ${tlsCertFile} ] || [ ! -s ${tlsKeyFile} ]; then
@@ -413,8 +419,13 @@ in
           trap 'rm -rf "$tmp"' EXIT
           if tailscale cert --cert-file "$tmp/fullchain.pem" --key-file "$tmp/privkey.pem" "$dnsname"; then
             mkdir -p ${tlsDir}
-            install -m 600 "$tmp/fullchain.pem" ${tlsCertFile}
-            install -m 600 "$tmp/privkey.pem" ${tlsKeyFile}
+            # This service runs as root (needs it to reach tailscaled's
+            # socket), but nginx.service — the actual reader — runs as
+            # User=nginx. Without an explicit chown these land root:root
+            # and nginx can't open them, taking nginx down at its next
+            # start/reload despite this fetch itself succeeding.
+            install -m 600 -o nginx -g nginx "$tmp/fullchain.pem" ${tlsCertFile}
+            install -m 600 -o nginx -g nginx "$tmp/privkey.pem" ${tlsKeyFile}
             systemctl reload nginx.service || true
             echo "renewed HTTPS cert for $dnsname"
           else
