@@ -16,6 +16,7 @@ let
     flakePath = cfg.deploy.flakePath;
     flakeAttr = cfg.deploy.flakeAttr;
     stateDir = cfg.stateDir;
+    secretsFile = cfg.secretsFile;
   };
 
   # ExPTY sets SIGCHLD=SIG_IGN in the forked child before exec'ing claude,
@@ -68,7 +69,11 @@ in
       default = "/etc/sapohub/secrets.env";
       description = ''
         Root-owned env file with SECRET_KEY_BASE and any module secrets
-        (validated at boot; module secrets degrade gracefully).
+        (validated at boot; module secrets degrade gracefully). Also read
+        by sapohub-deploy (as root, since this file is root-only) for
+        GITHUB_TOKEN — used to push the config-repo commit made by
+        `sapohub-deploy --sync-prefs`. Optional: without it, --sync-prefs
+        still commits locally, it just can't push.
       '';
     };
 

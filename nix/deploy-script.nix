@@ -16,17 +16,29 @@
 { flakePath   # e.g. "/home/sapo/hub-config" (a git checkout)
 , flakeAttr   # e.g. "nixos"
 , stateDir    # e.g. "/var/lib/sapohub"
+, secretsFile # e.g. "/etc/sapohub/secrets.env" — root-only; may hold GITHUB_TOKEN
 }:
 
 pkgs.writeShellScriptBin "sapohub-deploy" ''
   set -euo pipefail
   export PATH="${lib.makeBinPath [
-    pkgs.git pkgs.coreutils pkgs.systemd pkgs.nixos-rebuild pkgs.gzip pkgs.jq
+    pkgs.git pkgs.coreutils pkgs.gnused pkgs.gnugrep pkgs.systemd pkgs.nixos-rebuild pkgs.gzip pkgs.jq
   ]}:$PATH"
 
   FLAKE_PATH="${flakePath}"
   FLAKE_ATTR="${flakeAttr}"
   STATE_DIR="${stateDir}"
+  SECRETS_FILE="${secretsFile}"
+
+  # GITHUB_TOKEN (if present in the root-only secrets file) authenticates
+  # the config-repo push below. This script already runs as root, so
+  # reading a root-owned 0600 file here doesn't widen access to anything.
+  # Optional: no token just means the --sync-prefs commit below succeeds
+  # locally but can't push (same as today, before this existed).
+  GITHUB_TOKEN=""
+  if [ -r "$SECRETS_FILE" ]; then
+    GITHUB_TOKEN="$(grep -m1 '^GITHUB_TOKEN=' "$SECRETS_FILE" | cut -d= -f2- || true)"
+  fi
 
   SNAPSHOT=""
   SYNC_PREFS=""
@@ -96,7 +108,19 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
       # commit never depends on host git config existing.
       git -c user.name="sapohub-deploy" -c user.email="sapohub-deploy@localhost" \
         -C "$FLAKE_PATH" commit -m "sapohub: sync UI preferences"
-      git -C "$FLAKE_PATH" push
+
+      if [ -n "$GITHUB_TOKEN" ]; then
+        # Push over an authenticated URL built just for this one push —
+        # never written to $FLAKE_PATH/.git/config, never in an argv any
+        # non-root process could read (this whole script only runs as
+        # root already).
+        REMOTE_URL="$(git -C "$FLAKE_PATH" remote get-url origin)"
+        AUTH_URL="$(printf '%s' "$REMOTE_URL" | sed "s|https://|https://x-access-token:$GITHUB_TOKEN@|")"
+        git -C "$FLAKE_PATH" push "$AUTH_URL"
+      else
+        echo "GITHUB_TOKEN not set in $SECRETS_FILE — commit made locally but not pushed" >&2
+        git -C "$FLAKE_PATH" push
+      fi
     fi
     rm -f "$OVERLAY"
   elif [ -f "$OVERLAY" ] && [ -s "$OVERLAY" ]; then
