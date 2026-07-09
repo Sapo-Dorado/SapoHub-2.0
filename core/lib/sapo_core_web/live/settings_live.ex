@@ -454,7 +454,7 @@ defmodule SapoCoreWeb.SettingsLive do
                   </span>
                   <span
                     :if={!s.set?}
-                    class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] text-[#E0A458] border border-[#6b4f2a]"
+                    class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] text-[#E05C5C] border border-[#6b2b2b]"
                   >
                     missing
                   </span>
