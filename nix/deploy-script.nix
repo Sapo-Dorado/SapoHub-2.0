@@ -132,7 +132,15 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   fi
 
   echo "starting rebuild (detached; streaming journal — Ctrl-C safe) ..."
+  # systemd-run does NOT inherit this script's PATH — transient units start
+  # with systemd's own minimal default env, not the invoking shell's. That
+  # silently broke nixos-rebuild-ng, which shells out to the `test`
+  # coreutils binary internally and can't find it without coreutils on
+  # PATH: it failed deep into the build with "[Errno 2] No such file or
+  # directory: 'test'", after minutes of otherwise-successful work.
+  # --setenv carries the PATH set at the top of this script through.
   systemd-run --unit=sapohub-deploy --collect --no-block \
+    --setenv=PATH="$PATH" \
     nixos-rebuild switch --flake "$FLAKE_PATH#$FLAKE_ATTR"
 
   exec journalctl -u sapohub-deploy -f --no-pager
