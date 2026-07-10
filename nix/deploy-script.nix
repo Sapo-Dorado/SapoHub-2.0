@@ -33,6 +33,13 @@ let
   # caller-controlled paths as arguments.
   runRebuild = pkgs.writeShellScript "sapohub-deploy-rebuild" ''
     set -uo pipefail
+    # See the matching comment in sapohub-deploy above: reset SIGCHLD in
+    # case it's ever inherited ignored here too. systemd-run normally
+    # resets signal dispositions to default for a transient unit, so this
+    # is belt-and-suspenders rather than a fix for an observed failure —
+    # cheap enough to not skip it, given how hard the equivalent bug in
+    # the outer script was to pin down.
+    trap - CHLD
     export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.nixos-rebuild ]}:$PATH"
     NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     if nixos-rebuild switch --flake "$FLAKE_PATH#$FLAKE_ATTR"; then
@@ -51,6 +58,25 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   export PATH="${lib.makeBinPath [
     pkgs.bash pkgs.git pkgs.coreutils pkgs.gnused pkgs.gnugrep pkgs.systemd pkgs.nixos-rebuild pkgs.gzip pkgs.jq
   ]}:$PATH"
+
+  # THE actual root cause of the "deploy vanishes instantly" bug (found
+  # after two failed attempts at this — see git log for the false starts).
+  # sapo_core runs on the BEAM (Erlang VM), which sets SIGCHLD to SIG_IGN
+  # process-wide by default. This is spawned via a PTY from that same
+  # BEAM process (CommandSession -> Terminal.spawn), so `sudo`, this
+  # script, and everything it forks all INHERIT that ignored disposition.
+  # With SIGCHLD ignored, the kernel auto-reaps every child the instant it
+  # exits — so when git internally forks helpers (git-remote-https,
+  # rev-list, the fetch process, etc.) and later calls its OWN waitpid()
+  # on them, the kernel has already reaped them and that call fails with
+  # ECHILD ("No child processes"), which git treats as a fatal error.
+  # Confirmed locally: `trap "" CHLD` before a `git pull` reproduces this
+  # verbatim, and `trap - CHLD` (reset to default) fixes it outright. Does
+  # nothing when run by hand over SSH (interactive shells don't inherit
+  # an ignored SIGCHLD), which is exactly why manual reproduction attempts
+  # kept "fixing" nothing — only a real Settings-page click exercises the
+  # BEAM-inherited disposition this actually depends on.
+  trap - CHLD
 
   FLAKE_PATH="${flakePath}"
   FLAKE_ATTR="${flakeAttr}"
