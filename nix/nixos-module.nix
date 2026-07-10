@@ -316,12 +316,22 @@ in
           RELEASE_COOKIE = "sapohub";
           LANG = "en_US.UTF-8";
           # claude (SIGCHLD-fixed) first on PATH for assistant sessions.
+          #
+          # /run/wrappers/bin comes FIRST and deliberately isn't in the
+          # makeBinPath list below: that's where NixOS puts the setuid
+          # wrapper for `sudo` (security.wrappers). pkgs.sudo's own
+          # store path is a plain, non-setuid binary — if that resolved
+          # first, `sudo sapohub-deploy` / `sudo sapohub-set-secret`
+          # would fail with "must be owned by uid 0 and have the setuid
+          # bit set" (seen in practice: this broke the Settings page's
+          # secret-save flow, since System.find_executable("sudo") was
+          # picking up the store path off this same PATH).
           PATH = lib.mkForce
-            "${lib.makeBinPath [
+            "/run/wrappers/bin:${lib.makeBinPath [
               claudeWrapper
               cfg.cliPackage
               pkgs.bash pkgs.coreutils pkgs.git pkgs.curl pkgs.jq
-              pkgs.gnutar pkgs.gzip pkgs.openssh pkgs.sudo pkgs.systemd
+              pkgs.gnutar pkgs.gzip pkgs.openssh pkgs.systemd
             ]}:/run/current-system/sw/bin";
         };
 
