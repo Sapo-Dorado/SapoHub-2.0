@@ -309,6 +309,11 @@ in
           SAPO_CLI_PATH = "${cfg.cliPackage}/bin/sapo";
           PREFS_BASE = "/etc/sapohub/prefs.json";
           PREFS_OVERLAY = "${cfg.stateDir}/db/prefs-overlay.json";
+          # Written by sapohub-deploy (nix/deploy-script.nix) when a deploy
+          # finishes, regardless of whether sapohub.service itself survives
+          # the rebuild — read at Settings-page mount time to show "last
+          # deployed at" + success/failure even across restarts/reloads.
+          LAST_DEPLOY_FILE = "${cfg.stateDir}/db/last-deploy.json";
           SAPO_API_BASE = "${baseUrl}/api";
           RELEASE_TMP = "${cfg.stateDir}/tmp";
           # The release store path is read-only; supply the node cookie

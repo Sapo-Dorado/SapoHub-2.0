@@ -40,6 +40,13 @@ if config_env() == :prod do
     snapshots_dir: System.get_env("SNAPSHOTS_DIR") || Path.join(state_dir, "snapshots"),
     restore_pending:
       System.get_env("RESTORE_PENDING") || Path.join(state_dir, "restore/pending.tar.gz"),
+    # Written by sapohub-deploy (nix/deploy-script.nix) from inside its
+    # detached rebuild unit, independent of this app's own process
+    # lifecycle — read at Settings-page mount time to show "last deployed
+    # at" + success/failure even across a sapohub.service restart or a
+    # page reload.
+    last_deploy_file:
+      System.get_env("LAST_DEPLOY_FILE") || Path.join(state_dir, "last-deploy.json"),
     # `--sync-prefs` opts in to writing the local UI-preference overlay back
     # into the config repo. Only the Settings "Deploy" button should do this
     # (see nix/deploy-script.nix) — a bare `sudo sapohub-deploy` run by hand

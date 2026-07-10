@@ -59,7 +59,8 @@ defmodule SapoCoreWeb.SettingsLive do
        secret_saving: false,
        settable_secrets: @settable_secrets,
        saving: false,
-       deploy_running: CommandSession.alive?(@deploy_session)
+       deploy_running: CommandSession.alive?(@deploy_session),
+       last_deploy: read_last_deploy()
      )}
   end
 
@@ -332,6 +333,17 @@ defmodule SapoCoreWeb.SettingsLive do
   end
 
   def handle_info({:session_exit, sid, code}, socket) do
+    socket =
+      if sid == @deploy_session do
+        # sapohub-deploy (nix/deploy-script.nix) writes last-deploy.json
+        # from inside its detached rebuild unit before this outer
+        # session's process exits, so the file is already current by the
+        # time this message arrives.
+        assign(socket, last_deploy: read_last_deploy())
+      else
+        socket
+      end
+
     {:noreply,
      socket
      |> assign(deploy_running: false)
@@ -339,6 +351,21 @@ defmodule SapoCoreWeb.SettingsLive do
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  # ── Last deploy status ──────────────────────────────────────────────────────
+
+  defp read_last_deploy do
+    path = Application.get_env(:sapo_core, :last_deploy_file)
+
+    with true <- is_binary(path),
+         {:ok, content} <- File.read(path),
+         {:ok, %{"at" => at, "status" => status}} <- Jason.decode(content),
+         {:ok, dt, _offset} <- DateTime.from_iso8601(at) do
+      %{at: dt, status: status}
+    else
+      _ -> nil
+    end
+  end
 
   # ── Render ─────────────────────────────────────────────────────────────────
 
@@ -403,6 +430,16 @@ defmodule SapoCoreWeb.SettingsLive do
             </div>
             <p :if={not @deploy_secret_ready} class="px-4 pb-4 text-[12px] font-mono text-[#E0A458]">
               Requires the GITHUB_TOKEN secret.
+            </p>
+            <p :if={@last_deploy && !@deploy_running} class="px-4 pb-4 text-[12px] font-mono">
+              <span class="text-[#86948F]">
+                Last deployed {format_deploy_time(@last_deploy.at)} —
+              </span>
+              <span class={
+                if @last_deploy.status == "success", do: "text-[#7FB069]", else: "text-[#E05C5C]"
+              }>
+                {@last_deploy.status}
+              </span>
             </p>
 
             <details>
@@ -643,4 +680,10 @@ defmodule SapoCoreWeb.SettingsLive do
   defp format_size(bytes) when bytes >= 1_048_576, do: "#{Float.round(bytes / 1_048_576, 1)} MB"
   defp format_size(bytes) when bytes >= 1024, do: "#{div(bytes, 1024)} KB"
   defp format_size(bytes), do: "#{bytes} B"
+
+  # Server has no reliable notion of the browser's timezone, so this is
+  # shown in UTC (explicitly labeled) rather than guessing wrong.
+  defp format_deploy_time(%DateTime{} = dt) do
+    Calendar.strftime(dt, "%b %-d, %Y %H:%M UTC")
+  end
 end

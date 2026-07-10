@@ -19,10 +19,37 @@
 , secretsFile # e.g. "/etc/sapohub/secrets.env" — root-only; may hold GITHUB_TOKEN
 }:
 
+let
+  # Runs the actual rebuild and records its outcome. Kept as its own
+  # script (rather than an inline `bash -c '...'` string passed to
+  # systemd-run) to sidestep nested-quoting hazards, and — more
+  # importantly — so it can be started detached via systemd-run and
+  # keep running (and reliably write the result file) even if
+  # sapohub.service itself gets restarted mid-rebuild and kills the
+  # outer sapohub-deploy script that launched it. Takes the flake
+  # path/attr and status-file path via env vars (set with
+  # --setenv by the caller) rather than argv, to match this file's
+  # existing rule about root-executed commands not taking
+  # caller-controlled paths as arguments.
+  runRebuild = pkgs.writeShellScript "sapohub-deploy-rebuild" ''
+    set -uo pipefail
+    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.nixos-rebuild ]}:$PATH"
+    NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if nixos-rebuild switch --flake "$FLAKE_PATH#$FLAKE_ATTR"; then
+      STATUS=success
+    else
+      STATUS=failed
+    fi
+    printf '{"at":"%s","status":"%s"}\n' "$NOW" "$STATUS" > "$STATUS_FILE.tmp"
+    mv -f "$STATUS_FILE.tmp" "$STATUS_FILE"
+    [ "$STATUS" = success ]
+  '';
+in
+
 pkgs.writeShellScriptBin "sapohub-deploy" ''
   set -euo pipefail
   export PATH="${lib.makeBinPath [
-    pkgs.git pkgs.coreutils pkgs.gnused pkgs.gnugrep pkgs.systemd pkgs.nixos-rebuild pkgs.gzip pkgs.jq
+    pkgs.bash pkgs.git pkgs.coreutils pkgs.gnused pkgs.gnugrep pkgs.systemd pkgs.nixos-rebuild pkgs.gzip pkgs.jq
   ]}:$PATH"
 
   FLAKE_PATH="${flakePath}"
@@ -131,17 +158,67 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
     echo "skipping UI preference sync (no --sync-prefs) — git/nix config takes precedence"
   fi
 
-  echo "starting rebuild (detached; streaming journal — Ctrl-C safe) ..."
-  # systemd-run does NOT inherit this script's PATH — transient units start
-  # with systemd's own minimal default env, not the invoking shell's. That
-  # silently broke nixos-rebuild-ng, which shells out to the `test`
-  # coreutils binary internally and can't find it without coreutils on
-  # PATH: it failed deep into the build with "[Errno 2] No such file or
-  # directory: 'test'", after minutes of otherwise-successful work.
-  # --setenv carries the PATH set at the top of this script through.
+  echo "starting rebuild (detached; streaming journal) ..."
+  mkdir -p "$STATE_DIR/db"
+  STATUS_FILE="$STATE_DIR/db/last-deploy.json"
+  MARKER="$STATE_DIR/db/.last-deploy.marker"
+  # Recorded BEFORE the rebuild starts so we can tell a fresh STATUS_FILE
+  # write (below) apart from a stale one left by a previous run.
+  touch "$MARKER"
+
+  # The rebuild runs detached (--no-block, --collect) so it survives
+  # sapohub.service restarting itself mid-rebuild (nixos-rebuild switch
+  # will restart sapohub.service if the app's own derivation changed,
+  # which would otherwise kill this very script, a child of that
+  # service, partway through). Because of that, the result MUST be
+  # recorded from *inside* the detached unit itself — anything this
+  # outer script does after systemd-run returns can just as easily be
+  # killed by that same restart, and often is.
+  #
+  # systemd-run does NOT inherit this script's PATH — transient units
+  # start with systemd's own minimal default env, not the invoking
+  # shell's. That silently broke nixos-rebuild-ng, which shells out to
+  # the `test` coreutils binary internally and can't find it without
+  # coreutils on PATH: it failed deep into the build with "[Errno 2] No
+  # such file or directory: 'test'", after minutes of otherwise-
+  # successful work. --setenv carries this script's PATH through.
   systemd-run --unit=sapohub-deploy --collect --no-block \
     --setenv=PATH="$PATH" \
-    nixos-rebuild switch --flake "$FLAKE_PATH#$FLAKE_ATTR"
+    --setenv=FLAKE_PATH="$FLAKE_PATH" \
+    --setenv=FLAKE_ATTR="$FLAKE_ATTR" \
+    --setenv=STATUS_FILE="$STATUS_FILE" \
+    ${runRebuild}
 
-  exec journalctl -u sapohub-deploy -f --no-pager
+  # Stream the journal live for the browser terminal, but only for as
+  # long as it takes the detached unit above to report a fresh result —
+  # unlike before, this no longer runs forever. If sapohub.service (and
+  # therefore this whole script) gets killed by the rebuild restarting
+  # it, this loop just dies with it; the detached unit's status-file
+  # write is unaffected and still lands, so "last deployed at" stays
+  # correct even when the PTY session doesn't get to see the end.
+  journalctl -u sapohub-deploy -f --no-pager &
+  JPID=$!
+
+  # 30 minutes of headroom for a full rebuild; the journal stream above
+  # is the interesting output while this waits.
+  i=0
+  while [ "$i" -lt 1800 ]; do
+    if [ -f "$STATUS_FILE" ] && [ "$STATUS_FILE" -nt "$MARKER" ]; then
+      break
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+
+  kill "$JPID" 2>/dev/null || true
+  wait "$JPID" 2>/dev/null || true
+
+  if [ -f "$STATUS_FILE" ] && [ "$STATUS_FILE" -nt "$MARKER" ]; then
+    RESULT="$(grep -o '"status":"[a-z]*"' "$STATUS_FILE" | cut -d'"' -f4)"
+    echo "deploy finished: $RESULT"
+    [ "$RESULT" = "success" ]
+  else
+    echo "deploy did not report a result in time — check 'systemctl status sapohub-deploy'" >&2
+    exit 1
+  fi
 ''
