@@ -33,13 +33,11 @@ let
   # caller-controlled paths as arguments.
   runRebuild = pkgs.writeShellScript "sapohub-deploy-rebuild" ''
     set -uo pipefail
-    # See the matching comment in sapohub-deploy above: reset SIGCHLD in
-    # case it's ever inherited ignored here too. systemd-run normally
-    # resets signal dispositions to default for a transient unit, so this
-    # is belt-and-suspenders rather than a fix for an observed failure —
-    # cheap enough to not skip it, given how hard the equivalent bug in
-    # the outer script was to pin down.
-    trap - CHLD
+    # No SIGCHLD handling needed here (see sapohub-deploy's trampoline for
+    # the full story on why that's tricky) — systemd-run starts a
+    # transient unit with a clean environment, signal dispositions
+    # included, so this was never actually affected by the BEAM-inherited
+    # SIG_IGN that broke the outer script.
     export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.nixos-rebuild ]}:$PATH"
     NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     if nixos-rebuild switch --flake "$FLAKE_PATH#$FLAKE_ATTR"; then
@@ -51,16 +49,9 @@ let
     mv -f "$STATUS_FILE.tmp" "$STATUS_FILE"
     [ "$STATUS" = success ]
   '';
-in
 
-pkgs.writeShellScriptBin "sapohub-deploy" ''
-  set -euo pipefail
-  export PATH="${lib.makeBinPath [
-    pkgs.bash pkgs.git pkgs.coreutils pkgs.gnused pkgs.gnugrep pkgs.systemd pkgs.nixos-rebuild pkgs.gzip pkgs.jq
-  ]}:$PATH"
-
-  # THE actual root cause of the "deploy vanishes instantly" bug (found
-  # after two failed attempts at this — see git log for the false starts).
+  # The actual root cause of the "deploy vanishes instantly" bug (found
+  # after two failed attempts — see git log for those false starts).
   # sapo_core runs on the BEAM (Erlang VM), which sets SIGCHLD to SIG_IGN
   # process-wide by default. This is spawned via a PTY from that same
   # BEAM process (CommandSession -> Terminal.spawn), so `sudo`, this
@@ -70,13 +61,39 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   # rev-list, the fetch process, etc.) and later calls its OWN waitpid()
   # on them, the kernel has already reaped them and that call fails with
   # ECHILD ("No child processes"), which git treats as a fatal error.
-  # Confirmed locally: `trap "" CHLD` before a `git pull` reproduces this
-  # verbatim, and `trap - CHLD` (reset to default) fixes it outright. Does
-  # nothing when run by hand over SSH (interactive shells don't inherit
-  # an ignored SIGCHLD), which is exactly why manual reproduction attempts
-  # kept "fixing" nothing — only a real Settings-page click exercises the
-  # BEAM-inherited disposition this actually depends on.
-  trap - CHLD
+  #
+  # `trap - CHLD` does NOT fix this, despite looking like it should — bash
+  # (and every other POSIX shell) explicitly refuses to change a signal's
+  # disposition if it was already SIG_IGN when the shell's own process
+  # image was created ("signals ignored upon entry to a non-interactive
+  # shell cannot be trapped or reset" — this is documented bash behavior,
+  # not a bug). Proved this two ways: `trap "" CHLD; ...; trap - CHLD` in
+  # a single running shell "fixes" it (because the ignore was set *after*
+  # entry, so it's allowed to be undone) — which is exactly why the first
+  # fix attempt looked correct in every local test yet did nothing in
+  # production, where SIGCHLD is ignored *before* bash ever starts.
+  # Forcing that exact production shape locally (a child process explicitly
+  # SIG_IGNs SIGCHLD, then execve's into bash) reproduces the failure even
+  # with `trap - CHLD` present, confirming trap is a dead end here.
+  #
+  # The only thing that actually works: reset SIGCHLD via a runtime that
+  # doesn't have bash's restriction, before bash is ever exec'd. Python's
+  # signal.signal() does a real sigaction() call with no such guard, so
+  # this trampoline resets SIGCHLD to its default disposition and
+  # immediately execve's into the real script — by the time THAT bash
+  # starts, SIGCHLD was never "ignored upon entry" for it, so git's own
+  # child-process reaping works normally again. Confirmed locally against
+  # the exact failure shape (SIG_IGN set in a parent, then execve).
+  deployTrampoline = pkgs.writeShellScriptBin "sapohub-deploy" ''
+    set -euo pipefail
+    exec ${pkgs.python3}/bin/python3 -c "import os,signal,sys; signal.signal(signal.SIGCHLD, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])" ${deployInner} "$@"
+  '';
+
+  deployInner = pkgs.writeShellScript "sapohub-deploy-inner" ''
+  set -euo pipefail
+  export PATH="${lib.makeBinPath [
+    pkgs.bash pkgs.git pkgs.coreutils pkgs.gnused pkgs.gnugrep pkgs.systemd pkgs.nixos-rebuild pkgs.gzip pkgs.jq
+  ]}:$PATH"
 
   FLAKE_PATH="${flakePath}"
   FLAKE_ATTR="${flakeAttr}"
@@ -286,4 +303,8 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   # `set -o pipefail` (above) makes this pipeline's exit status main's
   # exit status, not tee's — a failure still fails the whole script.
   main "$@" 2>&1 | tee "$LOG_FILE"
-''
+'';
+
+in
+
+deployTrampoline
