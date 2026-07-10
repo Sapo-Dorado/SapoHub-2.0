@@ -6,5 +6,6 @@
 # with lib/sapo_core/generated/registry.ex — the two must stay in sync.
 [
   {:sapo_hello, "../../modules/hello"},
-  {:my_plate, "../../modules/my_plate"}
+  {:my_plate, "../../modules/my_plate"},
+  {:storage, "../../modules/storage"}
 ]

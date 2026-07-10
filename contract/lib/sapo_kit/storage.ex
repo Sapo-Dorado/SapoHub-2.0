@@ -22,5 +22,26 @@ defmodule SapoKit.Storage do
   @spec path(atom(), String.t()) :: String.t()
   def path(module_id, relative) when is_atom(module_id), do: impl().path(module_id, relative)
 
+  @doc """
+  All files across every module that has opted into storage.
+
+  Cross-module visibility, unlike `dir/1`/`path/2`. Deliberately exposed
+  for building visibility/admin tooling (e.g. the `storage` module's file
+  browser) — most modules should never need this; reach for `dir/1` first.
+  """
+  @spec list_all() :: [%{path: String.t(), size: non_neg_integer(), mtime: DateTime.t()}]
+  def list_all, do: impl().list_files()
+
+  @doc """
+  Resolve an API path (`<module_id>/<relative>`) to an absolute file path.
+  Rejects traversal outside the owning module's dir and unknown modules.
+  """
+  @spec resolve(String.t()) :: {:ok, String.t()} | {:error, :invalid_path}
+  def resolve(api_path), do: impl().resolve(api_path)
+
+  @doc "Delete the file at an API path (`<module_id>/<relative>`), across any opted-in module."
+  @spec delete(String.t()) :: :ok | {:error, term()}
+  def delete(api_path), do: impl().delete_file(api_path)
+
   defp impl, do: Application.fetch_env!(:sapo_module_kit, :storage)
 end

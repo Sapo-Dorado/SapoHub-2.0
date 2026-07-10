@@ -189,6 +189,15 @@
           cliFragment = true;
           jsHooks = true;
         };
+        storage = {
+          name = "storage";
+          app = "storage";
+          src = ./modules/storage;
+          elixirModule = "Storage.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = false;
+        };
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
