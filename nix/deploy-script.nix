@@ -217,9 +217,21 @@ let
         # never written to $FLAKE_PATH/.git/config, never in an argv any
         # non-root process could read (this whole script only runs as
         # root already).
+        #
+        # Deliberately non-fatal (`|| echo ...`, not a bare command under
+        # `set -e`). A rejected push (expired/under-scoped token, network
+        # blip, whatever) must NOT abort the rest of the script — the
+        # commit already landed locally and the rebuild below reads from
+        # this same local checkout, so it proceeds correctly either way.
+        # Confirmed the hard way: a 403 here (token lacked write access
+        # to the config repo) previously killed the whole deploy before
+        # it ever reached the rebuild step, which is exactly the
+        # "deploy exited early right after a settings change" bug.
         REMOTE_URL="$(git -C "$FLAKE_PATH" remote get-url origin)"
         AUTH_URL="$(printf '%s' "$REMOTE_URL" | sed "s|https://|https://x-access-token:$GITHUB_TOKEN@|")"
-        git -C "$FLAKE_PATH" push "$AUTH_URL"
+        if ! git -C "$FLAKE_PATH" push "$AUTH_URL"; then
+          echo "WARNING: push to config repo failed (see above) — commit made locally but not pushed; continuing with rebuild" >&2
+        fi
       else
         # Deliberately NOT attempting a bare `git push` here — without a
         # token it's certain to fail ("could not read Username"), and
