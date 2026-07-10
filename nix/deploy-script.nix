@@ -57,6 +57,19 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   STATE_DIR="${stateDir}"
   SECRETS_FILE="${secretsFile}"
 
+  # Persist everything this script prints to a log file from the very
+  # first line, IN ADDITION to the PTY the browser terminal is attached
+  # to. The PTY is the only place this output is normally visible — if
+  # the CommandSession GenServer exits (of its own accord, or because a
+  # rebuild restarts sapohub.service and kills it), that live view is
+  # gone for good and there's no way to tell why a fast failure happened
+  # after the fact. This makes every run forensically reviewable via
+  # `cat $STATE_DIR/db/last-deploy-output.log` regardless of what the
+  # browser saw or missed.
+  mkdir -p "$STATE_DIR/db"
+  LOG_FILE="$STATE_DIR/db/last-deploy-output.log"
+  exec > >(tee "$LOG_FILE") 2>&1
+
   # GITHUB_TOKEN (if present in the root-only secrets file) authenticates
   # the config-repo push below. This script already runs as root, so
   # reading a root-owned 0600 file here doesn't widen access to anything.
@@ -93,7 +106,16 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   git config --global --add safe.directory "$FLAKE_PATH" || true
 
   echo "pulling $FLAKE_PATH ..."
-  git -C "$FLAKE_PATH" pull --ff-only
+  # One retry on a bare transient failure (e.g. a momentary GitHub/network
+  # blip) before giving up — a `git pull` failure here aborts the whole
+  # script in well under a second (nothing else has run yet), which reads
+  # to anyone watching as "the deploy just vanished" even though it's
+  # really just a fetch that should be retried.
+  if ! git -C "$FLAKE_PATH" pull --ff-only; then
+    echo "pull failed, retrying once ..." >&2
+    sleep 2
+    git -C "$FLAKE_PATH" pull --ff-only
+  fi
 
   # Sync the UI preference overlay into the config repo as a REAL nix
   # module file (lib.mkDefault, so hand-written config always wins). The
