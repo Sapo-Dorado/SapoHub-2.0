@@ -66,9 +66,20 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
   # after the fact. This makes every run forensically reviewable via
   # `cat $STATE_DIR/db/last-deploy-output.log` regardless of what the
   # browser saw or missed.
+  #
+  # NOTE: this MUST be a plain `| tee`, never `exec > >(tee ...) 2>&1`.
+  # That form redirects via process substitution, which runs tee as an
+  # async background job — bash's job-control machinery then races git's
+  # own waitpid() calls on ITS child processes (fetch, rev-list, etc.),
+  # which lose that race and fail with "waitpid ... No child processes".
+  # Confirmed the hard way: that's exactly what broke the first version
+  # of this logging change. The whole body is wrapped in main() so its
+  # combined stdout+stderr can be piped through tee as one normal,
+  # synchronous pipeline stage instead.
   mkdir -p "$STATE_DIR/db"
   LOG_FILE="$STATE_DIR/db/last-deploy-output.log"
-  exec > >(tee "$LOG_FILE") 2>&1
+
+  main() {
 
   # GITHUB_TOKEN (if present in the root-only secrets file) authenticates
   # the config-repo push below. This script already runs as root, so
@@ -243,4 +254,10 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
     echo "deploy did not report a result in time — check 'systemctl status sapohub-deploy'" >&2
     exit 1
   fi
+
+  }
+
+  # `set -o pipefail` (above) makes this pipeline's exit status main's
+  # exit status, not tee's — a failure still fails the whole script.
+  main "$@" 2>&1 | tee "$LOG_FILE"
 ''
