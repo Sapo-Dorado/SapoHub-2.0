@@ -551,7 +551,7 @@ defmodule SapoCoreWeb.SettingsLive do
                 <td class="px-4 py-2.5 font-mono text-[12.5px]">{s.var}</td>
                 <td class="px-4 py-2.5 text-[#86948F] hidden sm:table-cell">{s.required_by}</td>
                 <td class="px-4 py-2.5">
-                  <div :if={@editing_secret != s.var} class="flex items-center gap-2">
+                  <div :if={@editing_secret != s.var} class="flex items-center justify-between gap-2">
                     <span
                       :if={s.set?}
                       class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] text-[#7FB069] border border-[#3C5934]"
@@ -568,9 +568,10 @@ defmodule SapoCoreWeb.SettingsLive do
                       :if={s.var in @settable_secrets}
                       phx-click="edit_secret"
                       phx-value-var={s.var}
-                      class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#86948F] border-[#242D31] hover:text-[#7FB069] hover:border-[#3C5934] cursor-pointer"
+                      title={if s.set?, do: "Replace #{s.var}", else: "Set #{s.var}"}
+                      class="p-1 rounded-[3px] text-[#86948F] hover:text-[#7FB069] hover:bg-[#1a2419] cursor-pointer"
                     >
-                      {if s.set?, do: "replace", else: "set"}
+                      <.icon name="hero-pencil-square" class="size-4" />
                     </button>
                   </div>
                   <form
