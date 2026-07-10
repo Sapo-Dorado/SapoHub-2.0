@@ -72,11 +72,12 @@ in
         (validated at boot; module secrets degrade gracefully). Also read
         by sapohub-deploy (as root, since this file is root-only) for
         GITHUB_TOKEN — used to push the config-repo commit made by
-        `sapohub-deploy --sync-prefs`. Optional: without it, --sync-prefs
-        still commits locally, it just can't push. See the README's
-        "Secrets" section for what kind of token to generate (a
-        fine-grained PAT scoped to just the config repo, Contents:
-        Read and write) and how to add it.
+        `sapohub-deploy --sync-prefs`. Also usable by other core features
+        that reach GitHub (e.g. the `projects` resource). Optional:
+        without it, --sync-prefs still commits locally, it just can't
+        push. See the README's "Secrets" section for what kind of token
+        to generate (a fine-grained PAT, Contents: Read and write, scoped
+        to whichever repos SapoHub should touch) and how to add it.
       '';
     };
 

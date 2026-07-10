@@ -109,11 +109,17 @@ needs):
 
 1. GitHub → Settings → Developer settings → Personal access tokens →
    Fine-grained tokens → Generate new token
-2. **Repository access**: "Only select repositories" → your config
-   repo (e.g. `SapoHub-Config`) — nothing else
+2. **Repository access**: this token isn't just for `sapohub-deploy` —
+   SapoHub reaches GitHub from other places too (e.g. the `projects`
+   resource pulling/pushing arbitrary repos), so scope it to whichever
+   repos you want SapoHub to touch. "Only select repositories" with
+   each one picked is the tighter option; "All repositories" is
+   simpler if that list is going to keep growing. Either way, the
+   permission below stays minimal regardless of how many repos it
+   covers.
 3. **Permissions**: Repository permissions → **Contents: Read and
-   write** (this alone is enough to `git push`; leave everything else
-   at "No access")
+   write** (this alone is enough to `git pull`/`git push`; leave
+   everything else at "No access")
 4. Add an expiration you're comfortable renewing on
 
 Add it to the secrets file as `GITHUB_TOKEN=<token>`, same as any other
