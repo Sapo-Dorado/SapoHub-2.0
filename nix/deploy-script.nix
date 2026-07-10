@@ -124,6 +124,17 @@ let
 
   main() {
 
+  # Non-fatal problems accumulate here (currently just "the prefs push
+  # failed") so they can be recorded into last-deploy.json alongside the
+  # overall success/failed status, instead of only ever appearing in the
+  # scrolling terminal output. That terminal pane is removed from the DOM
+  # the moment the deploy session exits (see settings_live.ex) — nothing
+  # printed to it survives past that unless it's also written somewhere
+  # durable. A deploy that "succeeds" while quietly failing to push
+  # config changes should never look identical, after the fact, to one
+  # that fully succeeded.
+  WARNINGS=""
+
   # GITHUB_TOKEN (if present in the root-only secrets file) authenticates
   # the config-repo push below. This script already runs as root, so
   # reading a root-owned 0600 file here doesn't widen access to anything.
@@ -231,6 +242,7 @@ let
         AUTH_URL="$(printf '%s' "$REMOTE_URL" | sed "s|https://|https://x-access-token:$GITHUB_TOKEN@|")"
         if ! git -C "$FLAKE_PATH" push "$AUTH_URL"; then
           echo "WARNING: push to config repo failed (see above) — commit made locally but not pushed; continuing with rebuild" >&2
+          WARNINGS="push to config repo failed — preference change applied locally and used for this rebuild, but not pushed to GitHub (check GITHUB_TOKEN's write access)"
         fi
       else
         # Deliberately NOT attempting a bare `git push` here — without a
@@ -303,7 +315,23 @@ let
 
   if [ -f "$STATUS_FILE" ] && [ "$STATUS_FILE" -nt "$MARKER" ]; then
     RESULT="$(grep -o '"status":"[a-z]*"' "$STATUS_FILE" | cut -d'"' -f4)"
-    echo "deploy finished: $RESULT"
+
+    # Fold any non-fatal warnings collected above into the same status
+    # file the UI reads, so "succeeded but the prefs push failed" is
+    # visibly distinct from a fully clean success — not just something
+    # that scrolled past in the terminal and vanished. STATUS_FILE was
+    # just written by the detached rebuild unit as plain {"at":...,
+    # "status":...}; patch it in place with jq rather than growing that
+    # printf in runRebuild, since only this script (not the rebuild)
+    # knows about the push failure.
+    if [ -n "$WARNINGS" ]; then
+      jq --arg w "$WARNINGS" '. + {warnings: [$w]}' "$STATUS_FILE" > "$STATUS_FILE.tmp"
+      mv -f "$STATUS_FILE.tmp" "$STATUS_FILE"
+      echo "deploy finished: $RESULT (with warnings — see above)"
+    else
+      echo "deploy finished: $RESULT"
+    fi
+
     [ "$RESULT" = "success" ]
   else
     echo "deploy did not report a result in time — check 'systemctl status sapohub-deploy'" >&2

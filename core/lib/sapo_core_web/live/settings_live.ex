@@ -359,9 +359,9 @@ defmodule SapoCoreWeb.SettingsLive do
 
     with true <- is_binary(path),
          {:ok, content} <- File.read(path),
-         {:ok, %{"at" => at, "status" => status}} <- Jason.decode(content),
+         {:ok, %{"at" => at, "status" => status} = decoded} <- Jason.decode(content),
          {:ok, dt, _offset} <- DateTime.from_iso8601(at) do
-      %{at: dt, status: status}
+      %{at: dt, status: status, warnings: Map.get(decoded, "warnings", [])}
     else
       _ -> nil
     end
@@ -436,9 +436,16 @@ defmodule SapoCoreWeb.SettingsLive do
                 Last deployed {format_deploy_time(@last_deploy.at)} —
               </span>
               <span class={
-                if @last_deploy.status == "success", do: "text-[#7FB069]", else: "text-[#E05C5C]"
+                cond do
+                  @last_deploy.status != "success" -> "text-[#E05C5C]"
+                  @last_deploy.warnings != [] -> "text-[#E0A458]"
+                  true -> "text-[#7FB069]"
+                end
               }>
                 {@last_deploy.status}
+              </span>
+              <span :if={@last_deploy.warnings != []} class="block mt-1 text-[#E0A458]">
+                <span :for={w <- @last_deploy.warnings}>⚠ {w}</span>
               </span>
             </p>
 
