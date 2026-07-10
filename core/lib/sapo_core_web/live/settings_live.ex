@@ -21,6 +21,12 @@ defmodule SapoCoreWeb.SettingsLive do
 
   @deploy_session "deploy"
 
+  # Secrets the Settings page will let you type in and write (via
+  # sapohub-set-secret, nix/secret-script.nix) rather than requiring SSH.
+  # Keep in sync with that script's own allowlist — each side checks
+  # independently on purpose, neither trusts the other alone.
+  @settable_secrets ["GITHUB_TOKEN"]
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -49,6 +55,9 @@ defmodule SapoCoreWeb.SettingsLive do
        statusline_options: statusline_options(),
        statusline_order_active: SapoCore.Statusline.order_active?(),
        deploy_secret_ready: github_token_set?(),
+       editing_secret: nil,
+       secret_saving: false,
+       settable_secrets: @settable_secrets,
        saving: false,
        deploy_running: CommandSession.alive?(@deploy_session)
      )}
@@ -81,9 +90,12 @@ defmodule SapoCoreWeb.SettingsLive do
   # token means sapohub-deploy would commit locally but fail to push.
   # Gate the button on it up front rather than let people hit a git
   # error buried in the terminal output.
-  defp github_token_set? do
-    (System.get_env("GITHUB_TOKEN") || "") != ""
-  end
+  # GITHUB_TOKEN is checked via sapohub-set-secret --status (reads the
+  # secrets file fresh, as root) rather than System.get_env — the app
+  # process's own env is only refreshed on restart, but this secret can
+  # now be written live from the Settings page below, and the badge
+  # should reflect that immediately rather than lying until a restart.
+  defp github_token_set?, do: secret_status("GITHUB_TOKEN")
 
   # SapoCore.Secrets.status/0 only covers module-declared secrets
   # (core_secrets + each module's required_secrets/0) — GITHUB_TOKEN is
@@ -92,6 +104,48 @@ defmodule SapoCoreWeb.SettingsLive do
   defp secrets do
     SapoCore.Secrets.status() ++
       [%{var: "GITHUB_TOKEN", required_by: :deploy, set?: github_token_set?()}]
+  end
+
+  defp secret_status(var) do
+    {cmd, args} = Application.fetch_env!(:sapo_core, :set_secret_cmd)
+    exe = System.find_executable(cmd) || cmd
+
+    case System.cmd(exe, args ++ ["--status", var]) do
+      {out, 0} -> String.trim(out) == "set"
+      _ -> false
+    end
+  end
+
+  # Writes one secret via a short-lived Port (not System.cmd — the value
+  # has to go over stdin, never argv, since argv is visible to any other
+  # local user via `ps`). The script only ever needs one line terminated
+  # by \n, so the port is never closed early: closing it would also cut
+  # off our ability to read its exit status/output back.
+  defp secret_set(var, value) do
+    {cmd, args} = Application.fetch_env!(:sapo_core, :set_secret_cmd)
+    exe = System.find_executable(cmd) || cmd
+
+    port =
+      Port.open({:spawn_executable, exe}, [
+        :binary,
+        :exit_status,
+        args: args ++ ["--set", var]
+      ])
+
+    Port.command(port, value <> "\n")
+    await_secret_port(port, "")
+  end
+
+  defp await_secret_port(port, acc) do
+    receive do
+      {^port, {:data, data}} -> await_secret_port(port, acc <> data)
+      {^port, {:exit_status, 0}} -> :ok
+      {^port, {:exit_status, code}} -> {:error, "sapohub-set-secret exited #{code}"}
+    after
+      10_000 ->
+        Port.close(port)
+        {:error, "timed out"}
+    end
   end
 
   defp dashboard_order do
@@ -181,6 +235,54 @@ defmodule SapoCoreWeb.SettingsLive do
       # Belt-and-suspenders: the button is already disabled/hidden from
       # this state client-side, but don't trust that alone.
       {:noreply, put_flash(socket, :error, "Requires the GITHUB_TOKEN secret.")}
+    end
+  end
+
+  # ── Secrets ────────────────────────────────────────────────────────────────
+
+  def handle_event("edit_secret", %{"var" => var}, socket) do
+    if var in @settable_secrets do
+      {:noreply, assign(socket, editing_secret: var)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("cancel_edit_secret", _params, socket) do
+    {:noreply, assign(socket, editing_secret: nil)}
+  end
+
+  def handle_event("save_secret", %{"var" => var, "value" => value}, socket) do
+    cond do
+      var not in @settable_secrets ->
+        {:noreply, put_flash(socket, :error, "Can't set #{var} from here.")}
+
+      String.trim(value) == "" ->
+        {:noreply, put_flash(socket, :error, "Value can't be empty.")}
+
+      true ->
+        socket = assign(socket, secret_saving: true)
+
+        case secret_set(var, String.trim(value)) do
+          :ok ->
+            {:noreply,
+             socket
+             |> assign(
+               secret_saving: false,
+               editing_secret: nil,
+               secrets: secrets(),
+               deploy_secret_ready: github_token_set?()
+             )
+             |> put_flash(:info, "#{var} saved.")}
+
+          {:error, reason} ->
+            Logger.error("secret set failed: #{inspect(reason)}")
+
+            {:noreply,
+             socket
+             |> assign(secret_saving: false)
+             |> put_flash(:error, "Couldn't save #{var}.")}
+        end
     end
   end
 
@@ -342,7 +444,10 @@ defmodule SapoCoreWeb.SettingsLive do
           <.eyebrow>Dashboard order</.eyebrow>
           <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
             <table class="w-full text-[13.5px]">
-              <tr :for={{slot, index} <- Enum.with_index(@dashboard_order)} class="border-t first:border-t-0 border-[#242D31]">
+              <tr
+                :for={{slot, index} <- Enum.with_index(@dashboard_order)}
+                class="border-t first:border-t-0 border-[#242D31]"
+              >
                 <td class="px-4 py-2.5 font-mono text-[12.5px]">{slot.title}</td>
                 <td class="px-4 py-2.5 text-right whitespace-nowrap">
                   <button
@@ -446,18 +551,57 @@ defmodule SapoCoreWeb.SettingsLive do
                 <td class="px-4 py-2.5 font-mono text-[12.5px]">{s.var}</td>
                 <td class="px-4 py-2.5 text-[#86948F] hidden sm:table-cell">{s.required_by}</td>
                 <td class="px-4 py-2.5">
-                  <span
-                    :if={s.set?}
-                    class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] text-[#7FB069] border border-[#3C5934]"
+                  <div :if={@editing_secret != s.var} class="flex items-center gap-2">
+                    <span
+                      :if={s.set?}
+                      class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] text-[#7FB069] border border-[#3C5934]"
+                    >
+                      set
+                    </span>
+                    <span
+                      :if={!s.set?}
+                      class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] text-[#E05C5C] border border-[#6b2b2b]"
+                    >
+                      missing
+                    </span>
+                    <button
+                      :if={s.var in @settable_secrets}
+                      phx-click="edit_secret"
+                      phx-value-var={s.var}
+                      class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#86948F] border-[#242D31] hover:text-[#7FB069] hover:border-[#3C5934] cursor-pointer"
+                    >
+                      {if s.set?, do: "replace", else: "set"}
+                    </button>
+                  </div>
+                  <form
+                    :if={@editing_secret == s.var}
+                    phx-submit="save_secret"
+                    class="flex items-center gap-2"
                   >
-                    set
-                  </span>
-                  <span
-                    :if={!s.set?}
-                    class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] text-[#E05C5C] border border-[#6b2b2b]"
-                  >
-                    missing
-                  </span>
+                    <input type="hidden" name="var" value={s.var} />
+                    <input
+                      type="password"
+                      name="value"
+                      autocomplete="off"
+                      placeholder={"paste #{s.var}"}
+                      class="bg-[#0D1113] border border-[#242D31] rounded-[3px] font-mono text-[12px] text-[#E6ECE9] px-2 py-1 focus:border-[#7FB069] focus:outline-none w-[220px]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={@secret_saving}
+                      class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#7FB069] border-[#3C5934] hover:bg-[#1a2419] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {if @secret_saving, do: "saving…", else: "save"}
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="cancel_edit_secret"
+                      disabled={@secret_saving}
+                      class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#86948F] border-[#242D31] hover:text-[#E6ECE9] cursor-pointer disabled:opacity-50"
+                    >
+                      cancel
+                    </button>
+                  </form>
                 </td>
               </tr>
               <tr :if={@secrets == []}>

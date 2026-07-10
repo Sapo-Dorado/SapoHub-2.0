@@ -6,7 +6,14 @@ config :sapo_core, storage_root: Path.expand("../tmp/storage_test", __DIR__)
 config :sapo_core,
   snapshots_dir: Path.expand("../tmp/snapshots_test", __DIR__),
   restore_pending: Path.expand("../tmp/restore_test/pending.tar.gz", __DIR__),
-  deploy_cmd: {"bash", ["-lc", "echo deploy-stub"]}
+  deploy_cmd: {"bash", ["-lc", "echo deploy-stub"]},
+  set_secret_cmd:
+    {"bash",
+     [
+       "-lc",
+       ~s'if [ "$1" = --status ]; then echo missing; else IFS= read -r _; echo ok; fi',
+       "--"
+     ]}
 
 # Configure your database
 #

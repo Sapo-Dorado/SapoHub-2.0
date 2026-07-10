@@ -44,7 +44,12 @@ if config_env() == :prod do
     # into the config repo. Only the Settings "Deploy" button should do this
     # (see nix/deploy-script.nix) — a bare `sudo sapohub-deploy` run by hand
     # (SSH, cron, whatever) must leave git/nix as the sole source of truth.
-    deploy_cmd: {"sudo", [System.get_env("DEPLOY_BIN") || "sapohub-deploy", "--sync-prefs"]}
+    deploy_cmd: {"sudo", [System.get_env("DEPLOY_BIN") || "sapohub-deploy", "--sync-prefs"]},
+    # Companion to sapohub-deploy (nix/secret-script.nix): writes one line
+    # of the root-only secrets file at a time, restricted to a fixed
+    # allowlist baked in at build time. Value is always piped over stdin
+    # by the caller (settings_live.ex), never argv.
+    set_secret_cmd: {"sudo", [System.get_env("SET_SECRET_BIN") || "sapohub-set-secret"]}
 
   storage_root =
     System.get_env("STORAGE_ROOT") ||

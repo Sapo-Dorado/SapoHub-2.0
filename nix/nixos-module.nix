@@ -19,6 +19,10 @@ let
     secretsFile = cfg.secretsFile;
   };
 
+  setSecretScript = import ./secret-script.nix { inherit pkgs lib; } {
+    secretsFile = cfg.secretsFile;
+  };
+
   # ExPTY sets SIGCHLD=SIG_IGN in the forked child before exec'ing claude,
   # which breaks Node's child-process management (waitpid -> ECHILD). This
   # wrapper resets SIGCHLD to SIG_DFL first. (Proven fix from v1.)
@@ -245,16 +249,25 @@ in
       };
       users.groups.sapohub = { };
 
-      # THE one root command (replaces v1's NOPASSWD:ALL).
+      # The two root commands (replaces v1's NOPASSWD:ALL). sapohub-deploy
+      # rebuilds the system; sapohub-set-secret only ever upserts one line
+      # of a root-only env file, restricted to a fixed allowlist of
+      # variable names baked in at build time (see nix/secret-script.nix).
       security.sudo.extraRules = [{
         users = [ "sapohub" ];
-        commands = [{
-          command = "/run/current-system/sw/bin/sapohub-deploy";
-          options = [ "NOPASSWD" ];
-        }];
+        commands = [
+          {
+            command = "/run/current-system/sw/bin/sapohub-deploy";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "/run/current-system/sw/bin/sapohub-set-secret";
+            options = [ "NOPASSWD" ];
+          }
+        ];
       }];
 
-      environment.systemPackages = [ cfg.cliPackage deployScript ];
+      environment.systemPackages = [ cfg.cliPackage deployScript setSecretScript ];
 
       # Nix-declared prefs base; the app overlays local UI edits on top.
       environment.etc."sapohub/prefs.json".text = builtins.toJSON cfg.prefs;

@@ -23,6 +23,26 @@ defmodule SapoCoreWeb.SettingsLiveTest do
     assert html =~ "Deploying…" or html =~ "Deploy latest"
   end
 
+  test "setting GITHUB_TOKEN via the inline form round-trips through the stub", %{conn: conn} do
+    {:ok, view, html} = live(conn, ~p"/settings")
+
+    assert html =~ "GITHUB_TOKEN"
+    assert html =~ "missing"
+
+    html = render_click(view, "edit_secret", %{"var" => "GITHUB_TOKEN"})
+    assert html =~ ~s(phx-submit="save_secret")
+
+    html = render_submit(view, "save_secret", %{"var" => "GITHUB_TOKEN", "value" => "ghp_fake"})
+    assert html =~ "GITHUB_TOKEN saved."
+  end
+
+  test "save_secret rejects vars outside the allowlist", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/settings")
+
+    html = render_submit(view, "save_secret", %{"var" => "SOME_OTHER_VAR", "value" => "x"})
+    assert html =~ "Can&#39;t set SOME_OTHER_VAR"
+  end
+
   test "snapshot download API rejects traversal", %{conn: conn} do
     conn = get(conn, ~p"/api/snapshot/#{"../../etc/passwd"}")
     assert json_response(conn, 404)

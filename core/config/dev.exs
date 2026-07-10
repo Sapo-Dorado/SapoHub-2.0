@@ -43,7 +43,17 @@ config :sapo_core,
 
 # Deploy is production-only; dev gets a stand-in so the button is testable.
 config :sapo_core,
-  deploy_cmd: {"bash", ["-lc", "echo '[dev] deploy is only available in production builds'"]}
+  deploy_cmd: {"bash", ["-lc", "echo '[dev] deploy is only available in production builds'"]},
+  # Same idea for the secret-setting flow: report "missing" so the form is
+  # reachable, accept (and discard) whatever's set so the happy path is
+  # testable without a real root-restricted binary in dev.
+  set_secret_cmd:
+    {"bash",
+     [
+       "-lc",
+       ~s'if [ "$1" = --status ]; then echo missing; else IFS= read -r _; echo ok; fi',
+       "--"
+     ]}
 
 # For development, we disable any cache and enable
 # debugging and code reloading.
