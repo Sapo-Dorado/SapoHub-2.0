@@ -118,8 +118,12 @@ pkgs.writeShellScriptBin "sapohub-deploy" ''
         AUTH_URL="$(printf '%s' "$REMOTE_URL" | sed "s|https://|https://x-access-token:$GITHUB_TOKEN@|")"
         git -C "$FLAKE_PATH" push "$AUTH_URL"
       else
+        # Deliberately NOT attempting a bare `git push` here — without a
+        # token it's certain to fail ("could not read Username"), and
+        # under `set -e` that would abort the whole script before ever
+        # reaching the rebuild below. The commit stays local; it'll push
+        # next time --sync-prefs runs with a token present.
         echo "GITHUB_TOKEN not set in $SECRETS_FILE — commit made locally but not pushed" >&2
-        git -C "$FLAKE_PATH" push
       fi
     fi
     rm -f "$OVERLAY"
