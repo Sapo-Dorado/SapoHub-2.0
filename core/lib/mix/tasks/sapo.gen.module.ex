@@ -183,6 +183,8 @@ defmodule Mix.Tasks.Sapo.Gen.Module do
   end
 
   defp live_index(module, title) do
+    crumb = String.downcase(title)
+
     """
     defmodule #{module}Web.Live.Index do
       use SapoKit.Web, :live_view
@@ -195,9 +197,17 @@ defmodule Mix.Tasks.Sapo.Gen.Module do
       @impl true
       def render(assigns) do
         ~H\"\"\"
-        <Layouts.app flash={@flash}>
-          <h1 class="text-xl font-semibold">#{title}</h1>
-        </Layouts.app>
+        <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
+          <SapoCoreWeb.Statusline.statusline crumb="#{crumb}" items={@statusline} />
+          <SapoCoreWeb.Layouts.flash_group flash={@flash} />
+
+          <main class="max-w-[640px] mx-auto px-4 py-8 space-y-6">
+            <div class="flex items-center gap-2.5 font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
+              <span>#{title}</span>
+              <span class="h-px flex-1 bg-[#242D31]"></span>
+            </div>
+          </main>
+        </div>
         \"\"\"
       end
     end

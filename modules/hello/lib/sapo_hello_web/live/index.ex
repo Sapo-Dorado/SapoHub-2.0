@@ -31,12 +31,19 @@ defmodule SapoHelloWeb.Live.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <div class="space-y-4">
-        <h1 class="text-xl font-semibold">Hello Module</h1>
-        <p class="text-sm opacity-70">
-          This is the reference util module. See <code>modules/hello</code> and
-          <code>docs/module-authoring.md</code>.
+    <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
+      <SapoCoreWeb.Statusline.statusline crumb="hello" items={@statusline} />
+      <SapoCoreWeb.Layouts.flash_group flash={@flash} />
+
+      <main class="max-w-[640px] mx-auto px-4 py-8 space-y-6">
+        <div class="flex items-center gap-2.5 font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
+          <span>Hello module</span>
+          <span class="h-px flex-1 bg-[#242D31]"></span>
+        </div>
+
+        <p class="font-mono text-[12.5px] text-[#86948F]">
+          This is the reference util module. See <code class="text-[#E6ECE9]">modules/hello</code>
+          and <code class="text-[#E6ECE9]">docs/module-authoring.md</code>.
         </p>
 
         <form phx-submit="create" class="flex gap-2">
@@ -44,19 +51,31 @@ defmodule SapoHelloWeb.Live.Index do
             type="text"
             name="name"
             value={@name}
-            placeholder="Your name"
-            class="input input-bordered flex-1"
+            placeholder="your name"
+            class="flex-1 box-border px-3 py-[9px] rounded-[4px] bg-[#151B1E] border border-[#242D31] text-sm text-[#E6ECE9] placeholder-[#86948F] focus:border-[#7FB069] focus:outline-none font-mono"
           />
-          <button type="submit" class="btn btn-primary">Greet</button>
+          <button
+            type="submit"
+            class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[11.5px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
+          >
+            Greet
+          </button>
         </form>
 
-        <ul id="greetings" class="space-y-1">
-          <li :for={g <- @greetings} class="text-sm">
+        <div class="rounded-[4px] border border-[#242D31] divide-y divide-[#242D31] overflow-hidden">
+          <p
+            :for={g <- @greetings}
+            id={"greeting-#{g.id}"}
+            class="px-3 py-2.5 bg-[#151B1E] font-mono text-[12.5px] text-[#E6ECE9]"
+          >
             Hello, {g.name}!
-          </li>
-        </ul>
-      </div>
-    </Layouts.app>
+          </p>
+          <p :if={@greetings == []} class="px-3 py-6 text-center font-mono text-[12px] text-[#86948F]">
+            No greetings yet.
+          </p>
+        </div>
+      </main>
+    </div>
     """
   end
 end

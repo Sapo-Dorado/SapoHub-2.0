@@ -107,14 +107,15 @@ defmodule StorageWeb.Live.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
-        <div class="max-w-[860px] mx-auto px-4 py-8">
-          <div class="flex items-center gap-2.5 mb-6 font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
-            <span>Storage</span>
-            <span class="h-px flex-1 bg-[#242D31]"></span>
-          </div>
+    <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
+      <SapoCoreWeb.Statusline.statusline
+        crumb="storage"
+        items={@statusline}
+        right={"#{length(@files)} file#{if length(@files) == 1, do: "", else: "s"}"}
+      />
+      <SapoCoreWeb.Layouts.flash_group flash={@flash} />
 
+      <main class="max-w-[860px] mx-auto px-4 py-8">
           <div
             class="rounded-[4px] border border-dashed border-[#242D31] hover:border-[#3C5934] bg-[#151B1E] px-4 py-5 mb-6 transition-colors"
             phx-drop-target={@uploads.files.ref}
@@ -219,9 +220,8 @@ defmodule StorageWeb.Live.Index do
               {if @files == [], do: "No files yet.", else: "No files match your filter."}
             </p>
           </div>
-        </div>
-      </div>
-    </Layouts.app>
+      </main>
+    </div>
     """
   end
 end
