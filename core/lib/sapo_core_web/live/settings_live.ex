@@ -17,6 +17,8 @@ defmodule SapoCoreWeb.SettingsLive do
   alias SapoCore.Assistant.CommandSession
   alias SapoCore.Assistant.SessionSupervisor
   alias SapoCore.Generated.Registry
+  alias SapoCore.Notify
+  alias SapoCore.Notify.Destination
   alias SapoCore.Snapshot
 
   @deploy_session "deploy"
@@ -60,7 +62,10 @@ defmodule SapoCoreWeb.SettingsLive do
        settable_secrets: @settable_secrets,
        saving: false,
        deploy_running: CommandSession.alive?(@deploy_session),
-       last_deploy: read_last_deploy()
+       last_deploy: read_last_deploy(),
+       destinations: Notify.list_destinations(),
+       editing_destination: nil,
+       destination_form: nil
      )}
   end
 
@@ -285,6 +290,73 @@ defmodule SapoCoreWeb.SettingsLive do
              |> put_flash(:error, "Couldn't save #{var}.")}
         end
     end
+  end
+
+  # ── Notification destinations ───────────────────────────────────────────────
+
+  def handle_event("new_destination", _params, socket) do
+    changeset = Destination.changeset(%Destination{channel: "telegram", config: %{}}, %{})
+
+    {:noreply,
+     assign(socket, editing_destination: :new, destination_form: to_form(changeset, as: "destination"))}
+  end
+
+  def handle_event("edit_destination", %{"id" => id}, socket) do
+    dest = Notify.get_destination!(id)
+    changeset = Destination.changeset(dest, %{})
+
+    {:noreply,
+     assign(socket, editing_destination: dest, destination_form: to_form(changeset, as: "destination"))}
+  end
+
+  def handle_event("cancel_edit_destination", _params, socket) do
+    {:noreply, assign(socket, editing_destination: nil, destination_form: nil)}
+  end
+
+  def handle_event("validate_destination", %{"destination" => params}, socket) do
+    base =
+      case socket.assigns.editing_destination do
+        :new -> %Destination{}
+        %Destination{} = dest -> dest
+      end
+
+    changeset = base |> Destination.changeset(params) |> Map.put(:action, :validate)
+    {:noreply, assign(socket, destination_form: to_form(changeset, as: "destination"))}
+  end
+
+  def handle_event("save_destination", %{"destination" => params}, socket) do
+    result =
+      case socket.assigns.editing_destination do
+        :new -> Notify.create_destination(params)
+        %Destination{} = dest -> Notify.update_destination(dest, params)
+      end
+
+    case result do
+      {:ok, _dest} ->
+        {:noreply,
+         socket
+         |> assign(
+           destinations: Notify.list_destinations(),
+           editing_destination: nil,
+           destination_form: nil
+         )
+         |> put_flash(:info, "Destination saved.")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, destination_form: to_form(changeset, as: "destination"))}
+    end
+  end
+
+  def handle_event("delete_destination", %{"id" => id}, socket) do
+    dest = Notify.get_destination!(id)
+    {:ok, _} = Notify.delete_destination(dest)
+    {:noreply, assign(socket, destinations: Notify.list_destinations())}
+  end
+
+  def handle_event("set_default_destination", %{"id" => id}, socket) do
+    dest = Notify.get_destination!(id)
+    {:ok, _} = Notify.set_default_destination(dest)
+    {:noreply, assign(socket, destinations: Notify.list_destinations())}
   end
 
   # ── Terminal events from the JS hook (deploy pane) ─────────────────────────
@@ -657,6 +729,81 @@ defmodule SapoCoreWeb.SettingsLive do
         </section>
 
         <section>
+          <.eyebrow>Notification destinations</.eyebrow>
+          <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
+            <table class="w-full text-[13.5px]">
+              <tr class="bg-[#0D1113] font-mono text-[11px] uppercase tracking-[.1em] text-[#86948F]">
+                <th class="px-4 py-2.5 text-left">Name</th>
+                <th class="px-4 py-2.5 text-left hidden sm:table-cell">Channel</th>
+                <th class="px-4 py-2.5 text-left">Default</th>
+                <th class="px-4 py-2.5 text-right">Actions</th>
+              </tr>
+              <%= for dest <- @destinations do %>
+                <tr :if={!editing?(@editing_destination, dest.id)} class="border-t border-[#242D31]">
+                  <td class="px-4 py-2.5 font-mono text-[12.5px]">{dest.name}</td>
+                  <td class="px-4 py-2.5 text-[#86948F] hidden sm:table-cell">{dest.channel}</td>
+                  <td class="px-4 py-2.5">
+                    <span
+                      :if={dest.is_default}
+                      class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] text-[#7FB069] border border-[#3C5934]"
+                    >
+                      default
+                    </span>
+                    <button
+                      :if={!dest.is_default}
+                      phx-click="set_default_destination"
+                      phx-value-id={dest.id}
+                      class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#86948F] border-[#242D31] hover:text-[#7FB069] hover:border-[#3C5934] cursor-pointer"
+                    >
+                      set default
+                    </button>
+                  </td>
+                  <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                    <button
+                      phx-click="edit_destination"
+                      phx-value-id={dest.id}
+                      title={"Edit #{dest.name}"}
+                      class="p-1 rounded-[3px] text-[#86948F] hover:text-[#7FB069] hover:bg-[#1a2419] cursor-pointer"
+                    >
+                      <.icon name="hero-pencil-square" class="size-4" />
+                    </button>
+                    <button
+                      phx-click="delete_destination"
+                      phx-value-id={dest.id}
+                      data-confirm={"Delete #{dest.name}?"}
+                      title={"Delete #{dest.name}"}
+                      class="p-1 rounded-[3px] text-[#86948F] hover:text-[#E05C5C] hover:bg-[#241414] cursor-pointer"
+                    >
+                      <.icon name="hero-trash" class="size-4" />
+                    </button>
+                  </td>
+                </tr>
+                <tr :if={editing?(@editing_destination, dest.id)} class="border-t border-[#242D31]">
+                  <td colspan="4" class="px-4 py-3">
+                    <.destination_form form={@destination_form} />
+                  </td>
+                </tr>
+              <% end %>
+              <tr :if={@destinations == [] and @editing_destination != :new}>
+                <td colspan="4" class="px-4 py-2.5 text-[#86948F]">No destinations configured.</td>
+              </tr>
+              <tr :if={@editing_destination == :new} class="border-t border-[#242D31]">
+                <td colspan="4" class="px-4 py-3">
+                  <.destination_form form={@destination_form} />
+                </td>
+              </tr>
+            </table>
+          </div>
+          <button
+            :if={@editing_destination == nil}
+            phx-click="new_destination"
+            class="mt-3 font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#7FB069] border-[#3C5934] hover:bg-[#1a2419] cursor-pointer"
+          >
+            + add destination
+          </button>
+        </section>
+
+        <section>
           <.eyebrow>Enabled utilities</.eyebrow>
           <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
             <table class="w-full text-[13.5px]">
@@ -672,6 +819,82 @@ defmodule SapoCoreWeb.SettingsLive do
         </section>
       </main>
     </div>
+    """
+  end
+
+  defp editing?(%Destination{id: id}, id), do: true
+  defp editing?(_, _), do: false
+
+  attr :form, :any, required: true
+
+  defp destination_form(assigns) do
+    ~H"""
+    <.form for={@form} phx-change="validate_destination" phx-submit="save_destination" class="space-y-2.5">
+      <div class="flex flex-wrap gap-2.5">
+        <input
+          type="text"
+          name={@form[:name].name}
+          value={@form[:name].value}
+          placeholder="name"
+          class="bg-[#0D1113] border border-[#242D31] rounded-[3px] font-mono text-[12px] text-[#E6ECE9] px-2 py-1 focus:border-[#7FB069] focus:outline-none w-[180px]"
+        />
+        <select
+          name={@form[:channel].name}
+          class="bg-[#0D1113] border border-[#242D31] rounded-[3px] font-mono text-[12px] text-[#E6ECE9] px-2 py-1 focus:border-[#7FB069] focus:outline-none"
+        >
+          <option :for={c <- Destination.channels()} value={c} selected={c == @form[:channel].value}>
+            {c}
+          </option>
+        </select>
+      </div>
+
+      <div :if={@form[:channel].value == "telegram"} class="flex flex-wrap gap-2.5">
+        <input
+          type="text"
+          name={@form[:config].name <> "[bot_token]"}
+          value={Map.get(@form[:config].value || %{}, "bot_token", "")}
+          placeholder="bot token"
+          class="bg-[#0D1113] border border-[#242D31] rounded-[3px] font-mono text-[12px] text-[#E6ECE9] px-2 py-1 focus:border-[#7FB069] focus:outline-none w-[220px]"
+        />
+        <input
+          type="text"
+          name={@form[:config].name <> "[chat_id]"}
+          value={Map.get(@form[:config].value || %{}, "chat_id", "")}
+          placeholder="chat id"
+          class="bg-[#0D1113] border border-[#242D31] rounded-[3px] font-mono text-[12px] text-[#E6ECE9] px-2 py-1 focus:border-[#7FB069] focus:outline-none w-[160px]"
+        />
+      </div>
+
+      <div :if={@form[:channel].value == "discord"} class="flex flex-wrap gap-2.5">
+        <input
+          type="text"
+          name={@form[:config].name <> "[webhook_url]"}
+          value={Map.get(@form[:config].value || %{}, "webhook_url", "")}
+          placeholder="webhook url"
+          class="bg-[#0D1113] border border-[#242D31] rounded-[3px] font-mono text-[12px] text-[#E6ECE9] px-2 py-1 focus:border-[#7FB069] focus:outline-none w-[320px]"
+        />
+      </div>
+
+      <p :for={{field, {msg, _opts}} <- @form.errors} class="text-[12px] font-mono text-[#E05C5C]">
+        {field}: {msg}
+      </p>
+
+      <div class="flex items-center gap-2">
+        <button
+          type="submit"
+          class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#7FB069] border-[#3C5934] hover:bg-[#1a2419] cursor-pointer"
+        >
+          save
+        </button>
+        <button
+          type="button"
+          phx-click="cancel_edit_destination"
+          class="font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border text-[#86948F] border-[#242D31] hover:text-[#E6ECE9] cursor-pointer"
+        >
+          cancel
+        </button>
+      </div>
+    </.form>
     """
   end
 

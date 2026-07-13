@@ -2,10 +2,12 @@ defmodule Mix.Tasks.Sapo.Gen.Cli do
   @shortdoc "Assemble the sapo CLI from core + enabled module commands"
 
   @moduledoc """
-  Assembles `priv/cli/core.sh`, each enabled module's generated commands
-  (from `priv/cli/commands.exs` — see `SapoCliGen`), and each module's
-  optional raw `priv/cli/fragment.sh` escape hatch (from the modules lock
-  file), plus a final dispatch line, into an executable `sapo` script.
+  Assembles `priv/cli/core.sh`, core's own generated commands (from
+  `priv/cli/commands.exs`, for core resources that fit the declarative
+  shape — see `SapoCliGen`), each enabled module's generated commands (same
+  mechanism, discovered via the modules lock file), and each module's
+  optional raw `priv/cli/fragment.sh` escape hatch, plus a final dispatch
+  line, into an executable `sapo` script.
 
       mix sapo.gen.cli            # writes _build/<env>/sapo
 
@@ -48,8 +50,18 @@ defmodule Mix.Tasks.Sapo.Gen.Cli do
 
     core = File.read!(Path.join(File.cwd!(), "priv/cli/core.sh"))
 
+    core_commands_path = Path.join(File.cwd!(), "priv/cli/commands.exs")
+
+    core_generated =
+      if File.exists?(core_commands_path) do
+        {resources, _binding} = Code.eval_file(core_commands_path)
+        SapoCliGen.generate(resources)
+      else
+        ""
+      end
+
     script =
-      [core | Enum.map(contributions, &elem(&1, 1))]
+      [core, core_generated | Enum.map(contributions, &elem(&1, 1))]
       |> Enum.join("\n")
       |> Kernel.<>("\nsapo_main \"$@\"\n")
 

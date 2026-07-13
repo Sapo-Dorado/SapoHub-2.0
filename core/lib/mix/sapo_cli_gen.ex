@@ -50,10 +50,17 @@ defmodule SapoCliGen do
     * `:upload` — multipart `POST <path>` with a required file positional
       (`field:` sets the form field name, default `"file"`)
 
-  `params` entries: `%{key:, flag:, default:, required:, type:}` — `type:
-  :integer` coerces via jq's `tonumber`; `required: true` dies with a usage
-  message if the flag is missing; `default:` is used when the flag is
-  omitted (and makes the field always present in the body).
+  `params` entries: `%{key:, flag:, default:, required:, type:, env:}` —
+  `type: :integer` coerces via jq's `tonumber`; `type: :json` passes the
+  value through raw via `--argjson` instead of `--arg` (the flag's value
+  must be valid JSON — pair it with `default: "{}"` or similar so it's
+  always well-formed); `required: true` dies with a usage message if the
+  flag is missing; `default:` is used when the flag is omitted (and makes
+  the field always present in the body). A param with `env:` instead of
+  `flag:` is sourced from an environment variable (e.g. `%{key: :session_id,
+  env: "SAPO_SESSION_ID"}`) rather than a CLI flag — it's read straight from
+  the environment, omitted from generated usage/flag parsing, and included
+  in the request body only if the env var is non-empty.
 
   ## Escape hatch
 
@@ -206,12 +213,13 @@ defmodule SapoCliGen do
     has_id = String.contains?(path, ":id")
     url = interpolate_id(path)
     method_fn = if verb == :create, do: "api_post", else: "api_patch"
+    flag_params = Enum.filter(params, &Map.has_key?(&1, :flag))
 
     id_capture =
       if has_id do
         """
         local id="${1:-}"
-        [ -n "$id" ] || die "usage: sapo <resource> #{usage_line(action, args, params, has_id)}"
+        [ -n "$id" ] || die "usage: sapo <resource> #{usage_line(action, args, flag_params, has_id)}"
         shift
         """
       else
@@ -224,22 +232,18 @@ defmodule SapoCliGen do
       |> Enum.map_join("\n", fn {arg, _i} ->
         ~s(local #{arg}="${1:-}") <>
           "\n" <>
-          ~s([ -n "$#{arg}" ] || die "usage: sapo <resource> #{usage_line(action, args, params, has_id)}") <>
+          ~s([ -n "$#{arg}" ] || die "usage: sapo <resource> #{usage_line(action, args, flag_params, has_id)}") <>
           "\nshift"
       end)
 
-    param_defaults =
-      Enum.map_join(params, "\n", fn p ->
-        default = Map.get(p, :default)
-        ~s(local #{p.key}="#{default}")
-      end)
+    param_defaults = Enum.map_join(params, "\n", &local_default/1)
 
     param_loop =
-      if params == [] do
+      if flag_params == [] do
         ""
       else
         cases =
-          Enum.map_join(params, "\n", fn p ->
+          Enum.map_join(flag_params, "\n", fn p ->
             ~s(      #{p.flag}) <> ") #{p.key}=\"$2\"; shift 2 ;;"
           end)
 
@@ -254,7 +258,7 @@ defmodule SapoCliGen do
       end
 
     required_checks =
-      params
+      flag_params
       |> Enum.filter(&Map.get(&1, :required, false))
       |> Enum.map_join("\n", fn p ->
         ~s([ -n "$#{p.key}" ] || die "#{action}: #{p.flag} is required")
@@ -293,7 +297,7 @@ defmodule SapoCliGen do
 
   defp build_body_expr(args, params) do
     arg_flags = Enum.map_join(args, " ", fn a -> ~s(--arg #{a} "$#{a}") end)
-    param_flags = Enum.map_join(params, " ", fn p -> ~s(--arg #{p.key} "$#{p.key}") end)
+    param_flags = Enum.map_join(params, " ", &flag_expr/1)
 
     required_fields =
       Enum.map_join(args, ", ", fn a -> "#{a}: $#{a}" end)
@@ -320,6 +324,13 @@ defmodule SapoCliGen do
 
   defp jq_value(%{type: :integer, key: key}), do: "($#{key}|tonumber)"
   defp jq_value(%{key: key}), do: "$#{key}"
+
+  defp flag_expr(%{type: :json, key: key}), do: ~s(--argjson #{key} "$#{key}")
+  defp flag_expr(%{key: key}), do: ~s(--arg #{key} "$#{key}")
+
+  defp local_default(%{key: key, env: env}), do: ~s(local #{key}="${#{env}:-}")
+  defp local_default(%{key: key, default: default}), do: ~s(local #{key}="#{default}")
+  defp local_default(%{key: key}), do: ~s(local #{key}="")
 
   # ── Small helpers ─────────────────────────────────────────────────────────
 

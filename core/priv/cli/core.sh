@@ -104,33 +104,6 @@ sapo_cmd_notify() {
   api_post /notify "$body"
 }
 
-sapo_cmd_destinations() {
-  local action="${1:-list}"
-  shift || true
-  case "$action" in
-    list) api_get /notification-destinations ;;
-    create)
-      local name="" channel="" config="{}"
-      while [ $# -gt 0 ]; do
-        case "$1" in
-          --name) name="$2"; shift 2 ;;
-          --channel) channel="$2"; shift 2 ;;
-          --config) config="$2"; shift 2 ;;
-          *) die "destinations create: unknown option '$1'" ;;
-        esac
-      done
-      api_post /notification-destinations \
-        "$(jq -n --arg n "$name" --arg c "$channel" --argjson cfg "$config" \
-          '{name: $n, channel: $c, config: $cfg}')"
-      ;;
-    delete) [ -n "${1:-}" ] || die "usage: sapo destinations delete <id>"
-      api_delete "/notification-destinations/$1" ;;
-    set-default) [ -n "${1:-}" ] || die "usage: sapo destinations set-default <id>"
-      api_post "/notification-destinations/$1/set-default" ;;
-    *) die "usage: sapo destinations list | create | delete <id> | set-default <id>" ;;
-  esac
-}
-
 sapo_cmd_snapshot() {
   local action="${1:-list}"
   shift || true
@@ -167,5 +140,11 @@ sapo_cmd_storage() {
     *) die "usage: sapo storage list | get <path> [-o <file>] | delete <path>" ;;
   esac
 }
+
+# `destinations` (and other core resources that fit the <resource> <action>
+# shape) are generated from priv/cli/commands.exs and appended below by
+# `mix sapo.gen.cli` — see SapoCliGen. `notify` stays hand-written above
+# since it's a flat `sapo notify <message> [flags]` command with no action
+# word, which doesn't fit that generator's resource/action model.
 
 # ── Module fragments are appended below by the CLI generator ─────────────────
