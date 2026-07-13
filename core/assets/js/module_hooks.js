@@ -2,5 +2,6 @@
 // Dev equivalent of nix/compose.nix's module_hooks.js generation.
 import SapoHelloHooks from "../../../modules/hello/assets/hooks.js";
 import MyPlateHooks from "../../../modules/my_plate/assets/hooks.js";
+import StorageHooks from "../../../modules/storage/assets/hooks.js";
 
-export default Object.assign({}, SapoHelloHooks, MyPlateHooks);
+export default Object.assign({}, SapoHelloHooks, MyPlateHooks, StorageHooks);

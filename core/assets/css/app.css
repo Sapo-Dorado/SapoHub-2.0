@@ -118,4 +118,13 @@
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
+/* Match the app's dark background beyond page content — otherwise it
+   defaults to white, visible during mobile Safari's rubber-band
+   overscroll bounce (and briefly on load before content paints). Kept in
+   sync with the dark-terminal design system's page-background token
+   (#0D1113 — see dashboard_live.ex/settings_live.ex/my_plate index.ex). */
+html, body {
+  background-color: #0D1113;
+}
+
 /* This file is for your main application CSS */
