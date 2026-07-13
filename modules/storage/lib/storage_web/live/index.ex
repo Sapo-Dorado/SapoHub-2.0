@@ -135,12 +135,27 @@ defmodule StorageWeb.Live.Index do
 
   defp handle_progress(:files, entry, socket) do
     if entry.done? do
-      socket =
+      # `consume_uploaded_entry/3` returns whatever the callback's `{:ok, _}` /
+      # `{:error, _}` tuple unwraps to — NOT the socket — so capture that
+      # separately and keep using the original `socket` afterward.
+      result =
         consume_uploaded_entry(socket, entry, fn %{path: tmp} ->
-          Storage.save_upload(tmp, entry.client_name, socket.assigns.path)
+          case Storage.save_upload(tmp, entry.client_name, socket.assigns.path) do
+            {:ok, api_path} -> {:ok, {:ok, api_path}}
+            {:error, reason} -> {:ok, {:error, reason}}
+          end
         end)
 
-      {:noreply, load(socket)}
+      socket =
+        case result do
+          {:ok, _api_path} ->
+            load(socket)
+
+          {:error, reason} ->
+            put_flash(socket, :error, "Could not save #{entry.client_name}: #{inspect(reason)}")
+        end
+
+      {:noreply, socket}
     else
       {:noreply, socket}
     end
