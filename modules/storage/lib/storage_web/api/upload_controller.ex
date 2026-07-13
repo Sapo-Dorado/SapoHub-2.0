@@ -7,7 +7,7 @@ defmodule StorageWeb.Api.UploadController do
   use SapoKit.Web, :controller
 
   def create(conn, %{"file" => %Plug.Upload{path: tmp, filename: filename}}) do
-    case Storage.save_upload(tmp, filename) do
+    case Storage.save_upload(tmp, filename, ["storage", "uploads"]) do
       {:ok, api_path} ->
         conn
         |> put_status(:created)

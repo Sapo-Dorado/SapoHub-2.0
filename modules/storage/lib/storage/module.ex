@@ -28,7 +28,10 @@ defmodule Storage.Module do
 
   @impl true
   def ui_routes do
-    [%{path: "/storage", live_view: StorageWeb.Live.Index, action: :index}]
+    [
+      %{path: "/storage", live_view: StorageWeb.Live.Index, action: :index},
+      %{path: "/storage/*path", live_view: StorageWeb.Live.Index, action: :index}
+    ]
   end
 
   @impl true

@@ -30,11 +30,13 @@ defmodule Mix.Tasks.Sapo.Gen.ModuleTest do
     assert files["mix.exs"] =~ ~s(path: "../deps/contract")
   end
 
-  test "generated live view uses the kit layout" do
+  test "generated live view uses the shared statusline navbar" do
     files = Gen.files("my_thing")
 
     live = files["lib/my_thing_web/live/index.ex"]
     assert live =~ "use SapoKit.Web, :live_view"
-    assert live =~ "<Layouts.app"
+    assert live =~ "SapoCoreWeb.Statusline.statusline"
+    assert live =~ ~s(crumb="mything")
+    refute live =~ "<Layouts.app"
   end
 end

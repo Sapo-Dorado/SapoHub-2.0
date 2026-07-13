@@ -39,9 +39,31 @@ defmodule SapoKit.Storage do
   @spec resolve(String.t()) :: {:ok, String.t()} | {:error, :invalid_path}
   def resolve(api_path), do: impl().resolve(api_path)
 
-  @doc "Delete the file at an API path (`<module_id>/<relative>`), across any opted-in module."
+  @doc "Delete the file or folder at an API path (`<module_id>/<relative>`), across any opted-in module."
   @spec delete(String.t()) :: :ok | {:error, term()}
   def delete(api_path), do: impl().delete_file(api_path)
+
+  @doc """
+  List the immediate contents (subfolders + files) at an API path.
+  `""` or `nil` lists the top level — one entry per opted-in module.
+  Uniform across modules: every opted-in module's storage is just a plain
+  folder tree, browsable and manageable the same way.
+  """
+  @spec list_dir(String.t() | nil) ::
+          {:ok, %{dirs: [map()], files: [map()]}} | {:error, :invalid_path}
+  def list_dir(api_path), do: impl().list_dir(api_path)
+
+  @doc "Create a folder at an API path (`<module_id>/<relative>`), across any opted-in module."
+  @spec mkdir(String.t()) :: :ok | {:error, term()}
+  def mkdir(api_path), do: impl().mkdir(api_path)
+
+  @doc """
+  Resolve an API path to an absolute *directory* path — unlike `resolve/1`,
+  this also accepts a bare module id (its storage root), not just a nested
+  file/folder path.
+  """
+  @spec resolve_dir(String.t()) :: {:ok, String.t()} | {:error, :invalid_path}
+  def resolve_dir(api_path), do: impl().resolve_dir(api_path)
 
   defp impl, do: Application.fetch_env!(:sapo_module_kit, :storage)
 end

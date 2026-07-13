@@ -103,12 +103,144 @@ defmodule SapoCore.Storage do
     end
   end
 
-  @doc "Delete the file at an API path."
-  @spec delete_file(String.t()) :: :ok | {:error, term()}
-  def delete_file(api_path) do
-    with {:ok, abs} <- resolve(api_path),
-         true <- File.regular?(abs) || {:error, :not_found} do
-      File.rm(abs)
+  @doc "Delete the file or folder at an API path."
+  @spec delete_file(String.t(), [module()]) :: :ok | {:error, term()}
+  def delete_file(api_path, modules \\ Registry.modules()) do
+    with {:ok, abs} <- resolve(api_path, modules) do
+      cond do
+        File.regular?(abs) ->
+          File.rm(abs)
+
+        File.dir?(abs) ->
+          case File.rm_rf(abs) do
+            {:ok, _} -> :ok
+            {:error, reason, _} -> {:error, reason}
+          end
+
+        true ->
+          {:error, :not_found}
+      end
+    end
+  end
+
+  @doc """
+  List the immediate contents (subfolders + files) at an API path, relative
+  to the storage root. `nil`/`""` lists the top level (one entry per
+  opted-in module's storage dir — which lives directly under the storage
+  root by default). Every level below is a plain, uniformly-browsable
+  folder tree; there is no special handling per module.
+  """
+  @spec list_dir(String.t() | nil, [module()]) ::
+          {:ok, %{dirs: [map()], files: [map()]}} | {:error, :invalid_path}
+  def list_dir(api_path, modules \\ Registry.modules())
+
+  def list_dir(empty, modules) when empty in [nil, ""] do
+    dirs =
+      modules
+      |> storage_modules()
+      |> Enum.map(fn mod ->
+        name = to_string(mod.id())
+        %{name: name, path: name, count: count_entries(dir(mod.id()))}
+      end)
+      |> Enum.sort_by(& &1.name)
+
+    {:ok, %{dirs: dirs, files: []}}
+  end
+
+  def list_dir(api_path, modules) do
+    with [module_part | rest] <- Path.split(api_path),
+         %{} = mod <- find_module(storage_modules(modules), module_part) do
+      base = Path.expand(dir(mod.id))
+      abs = Path.expand(Path.join([base | rest]))
+
+      if abs == base or String.starts_with?(abs, base <> "/") do
+        list_dir_abs(abs, api_path)
+      else
+        {:error, :invalid_path}
+      end
+    else
+      _ -> {:error, :invalid_path}
+    end
+  end
+
+  defp list_dir_abs(abs, api_path) do
+    case File.ls(abs) do
+      {:ok, names} ->
+        {dir_names, file_names} = Enum.split_with(names, &File.dir?(Path.join(abs, &1)))
+
+        dirs =
+          dir_names
+          |> Enum.map(fn name ->
+            %{name: name, path: Path.join(api_path, name), count: count_entries(Path.join(abs, name))}
+          end)
+          |> Enum.sort_by(& &1.name)
+
+        files =
+          file_names
+          |> Enum.map(fn name ->
+            full = Path.join(abs, name)
+            stat = File.stat!(full, time: :posix)
+
+            %{
+              name: name,
+              path: Path.join(api_path, name),
+              size: stat.size,
+              mtime: DateTime.from_unix!(stat.mtime)
+            }
+          end)
+          |> Enum.sort_by(& &1.name)
+
+        {:ok, %{dirs: dirs, files: files}}
+
+      {:error, _} ->
+        {:error, :invalid_path}
+    end
+  end
+
+  defp count_entries(dir) do
+    case File.ls(dir) do
+      {:ok, entries} -> length(entries)
+      _ -> 0
+    end
+  end
+
+  @doc """
+  Resolve an API path to an absolute *directory* path (unlike `resolve/2`,
+  the path may point at a module's root, not just a nested file/folder).
+  Rejects traversal outside the owning module's dir and unknown modules.
+  """
+  @spec resolve_dir(String.t(), [module()]) :: {:ok, String.t()} | {:error, :invalid_path}
+  def resolve_dir(api_path, modules \\ Registry.modules()) do
+    with [module_part | rest] <- Path.split(api_path),
+         %{} = mod <- find_module(storage_modules(modules), module_part) do
+      base = Path.expand(dir(mod.id))
+      abs = Path.expand(Path.join([base | rest]))
+
+      if abs == base or String.starts_with?(abs, base <> "/") do
+        {:ok, abs}
+      else
+        {:error, :invalid_path}
+      end
+    else
+      _ -> {:error, :invalid_path}
+    end
+  end
+
+  @doc "Create a folder at an API path, relative to the storage root."
+  @spec mkdir(String.t(), [module()]) :: :ok | {:error, term()}
+  def mkdir(api_path, modules \\ Registry.modules()) do
+    with [module_part | rest] when rest != [] <- Path.split(api_path),
+         %{} = mod <- find_module(storage_modules(modules), module_part) do
+      base = Path.expand(dir(mod.id))
+      abs = Path.expand(Path.join([base | rest]))
+
+      if String.starts_with?(abs, base <> "/") do
+        File.mkdir_p(abs)
+      else
+        {:error, :invalid_path}
+      end
+    else
+      _ -> {:error, :invalid_path}
     end
   end
 
