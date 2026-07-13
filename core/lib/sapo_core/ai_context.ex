@@ -10,7 +10,11 @@ defmodule SapoCore.AiContext do
       counts, so core never reaches into module data
     * CLI reference by shelling out to `sapo --help` (omitted if absent)
     * API reference via router introspection (always current)
-    * agent notes from the nix option `agentNotes` (AGENT_NOTES env)
+    * fixed "Notes for AI Agents" — framework-level rules true of any
+      SapoHub 2.0 deployment. Module-specific guidance doesn't belong here:
+      modules contribute their own state/usage via `ai_context/0` (embedded
+      above, under Utilities) or behavioral rules for the live embedded
+      assistant via `assistant_system_prompt/0` (SapoCore.Assistant).
   """
 
   alias SapoCore.Generated.Registry
@@ -52,11 +56,26 @@ defmodule SapoCore.AiContext do
     ## Notes for AI Agents
     - The database always stores/queries UTC. The API returns UTC.
       #{display_timezone_note()}
-    - When you finish a task or need user input, run `sapo notify "<short message>"` —
-      per-session suppression is handled automatically via SAPO_SESSION_ID.
-    - Files written under a utility's storage directory appear in the
-      storage API and in snapshots automatically.
-    #{agent_notes()}
+    - SapoHub 2.0 modules are independent — anything shared across modules
+      (notify, storage, scheduling, HTTP) goes through SapoKit.* facades,
+      not direct module-to-module calls.
+    - The app runs without root except one sudo command: `sapohub-deploy`.
+      Other sudo commands are blocked at the system level — don't attempt them.
+    - The `sapo` CLI is the preferred interface over raw curl calls. Module
+      commands appear automatically once a module ships
+      `priv/cli/commands.exs` (see docs/module-authoring.md) — no manual
+      wiring needed.
+    - Never trigger a deploy without explicit user instruction — it rebuilds
+      and restarts the live service. Always ensure changes are committed AND
+      pushed first (deploys pull from git, not the local working copy).
+    - Plain `sapohub-deploy` (no flags) doesn't need GITHUB_TOKEN. That
+      secret is only required for `--sync-prefs` (what the Settings page's
+      Deploy button runs), which also pushes a UI-prefs commit back to the
+      config repo.
+    - Before committing, run `git fetch origin` then
+      `git log HEAD..origin/main --oneline` — rebase first if it returns commits.
+    - Files written under a module's storage directory appear in the
+      storage API and in snapshots automatically — no manual registration needed.
     """
   end
 
@@ -114,16 +133,6 @@ defmodule SapoCore.AiContext do
     |> Enum.filter(&String.starts_with?(&1.path, "/api"))
     |> Enum.sort_by(&{&1.path, &1.verb})
     |> Enum.map_join("\n", &"- #{String.upcase(to_string(&1.verb))} #{&1.path}")
-  end
-
-  defp agent_notes do
-    case Application.get_env(:sapo_core, :agent_notes) do
-      notes when is_binary(notes) and notes != "" ->
-        notes |> String.split("\n", trim: true) |> Enum.map_join("\n", &"- #{&1}")
-
-      _ ->
-        ""
-    end
   end
 
   defp display_timezone_note do

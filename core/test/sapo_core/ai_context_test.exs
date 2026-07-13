@@ -31,20 +31,12 @@ defmodule SapoCore.AiContextTest do
     assert context =~ "- DELETE /api/hello/:id"
   end
 
-  test "includes agent notes from config, one bullet per line" do
-    previous = Application.get_env(:sapo_core, :agent_notes)
-    Application.put_env(:sapo_core, :agent_notes, "First note\nSecond note")
-
-    on_exit(fn ->
-      case previous do
-        nil -> Application.delete_env(:sapo_core, :agent_notes)
-        val -> Application.put_env(:sapo_core, :agent_notes, val)
-      end
-    end)
-
+  test "includes the fixed framework-level notes for AI agents" do
     context = AiContext.global_context()
-    assert context =~ "- First note"
-    assert context =~ "- Second note"
+
+    assert context =~ "## Notes for AI Agents"
+    assert context =~ "sapohub-deploy"
+    assert context =~ "SapoKit.* facades"
   end
 
   test "degrades gracefully when the sapo CLI is absent" do

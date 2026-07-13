@@ -75,10 +75,6 @@ if config_env() == :prod do
   # Whether assistant sessions get --chrome (nix option assistant.browser.enable).
   config :sapo_core, assistant_chrome: System.get_env("ASSISTANT_CHROME") == "true"
 
-  # Free-form agent notes for the AI context (nix option agentNotes),
-  # one note per line.
-  config :sapo_core, agent_notes: System.get_env("AGENT_NOTES")
-
   # Absolute path of the composed sapo CLI (set by the nix module) so the
   # AI context can embed `sapo --help`.
   config :sapo_core, sapo_cli_path: System.get_env("SAPO_CLI_PATH")

@@ -79,9 +79,6 @@
             # /etc/sapohub/secrets.env and /etc/sapohub-config — only
             # override if yours actually live somewhere else.
             deploy.flakeAttr = "your-host"; # YOUR nixosConfigurations attr name, not "hub"
-            agentNotes = ''
-              Times are UTC; user is in US Central.
-            '';
             # assistant.browser.enable = true;
             inherit prefs; # plain assignment — wins over sapohub-prefs.nix's mkDefault-wrapped values
           };

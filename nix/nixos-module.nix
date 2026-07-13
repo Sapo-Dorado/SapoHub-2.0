@@ -93,12 +93,6 @@ in
       description = "Module file storage root (default: <stateDir>/storage).";
     };
 
-    agentNotes = mkOption {
-      type = types.lines;
-      default = "";
-      description = "Extra notes for AI agents, one per line (AI context).";
-    };
-
     timezone = mkOption {
       type = types.str;
       default = "Etc/UTC";
@@ -318,7 +312,6 @@ in
           RESTORE_PENDING = "${cfg.stateDir}/db/restore/pending.tar.gz";
           ASSISTANT_WORKDIR = workDir;
           ASSISTANT_CHROME = if cfg.assistant.browser.enable then "true" else "false";
-          AGENT_NOTES = cfg.agentNotes;
           DISPLAY_TIMEZONE = cfg.timezone;
           SAPO_CLI_PATH = "${cfg.cliPackage}/bin/sapo";
           PREFS_BASE = "/etc/sapohub/prefs.json";

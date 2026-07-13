@@ -110,7 +110,7 @@ destructive nixos-anywhere run — don't route around that by scripting
 the confirmation input; let the user actually see and confirm it.
 
 **Customizing a fresh-machine target** (module selection,
-`agentNotes`, `assistant.browser.enable`, etc.) means editing the
+`assistant.browser.enable`, etc.) means editing the
 `sapohub.lib.mkFreshMachine { ... }` call for that host — either
 SapoHub-2.0's own `nixosConfigurations.fresh-machine` block, or (the
 normal case) the `hosts`/`mkHost` setup in a personal config repo like
