@@ -37,7 +37,11 @@
             elixir = beamPkgs.elixir_1_18;
             tailwind = toolsPkgs.tailwindcss_4;
           };
-          mkCli = import ./nix/cli.nix { inherit pkgs; lib = nixpkgs.lib; };
+          mkCli = import ./nix/cli.nix {
+            inherit pkgs;
+            lib = nixpkgs.lib;
+            elixir = beamPkgs.elixir_1_18;
+          };
         in {
           package = compose {
             src = self;
