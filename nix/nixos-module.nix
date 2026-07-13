@@ -99,6 +99,19 @@ in
       description = "Extra notes for AI agents, one per line (AI context).";
     };
 
+    timezone = mkOption {
+      type = types.str;
+      default = "Etc/UTC";
+      example = "America/Los_Angeles";
+      description = ''
+        IANA timezone name used ONLY for rendering times in the UI
+        (statusline clock, file timestamps, deploy history, etc).
+        The database always stores and queries UTC regardless of this
+        setting — changing it never rewrites or reinterprets any stored
+        data, it only changes how already-UTC timestamps are displayed.
+      '';
+    };
+
     prefs = mkOption {
       type = types.attrsOf (types.either types.str types.bool);
       default = { };
@@ -306,6 +319,7 @@ in
           ASSISTANT_WORKDIR = workDir;
           ASSISTANT_CHROME = if cfg.assistant.browser.enable then "true" else "false";
           AGENT_NOTES = cfg.agentNotes;
+          DISPLAY_TIMEZONE = cfg.timezone;
           SAPO_CLI_PATH = "${cfg.cliPackage}/bin/sapo";
           PREFS_BASE = "/etc/sapohub/prefs.json";
           PREFS_OVERLAY = "${cfg.stateDir}/db/prefs-overlay.json";

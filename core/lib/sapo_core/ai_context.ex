@@ -50,7 +50,8 @@ defmodule SapoCore.AiContext do
     #{api_routes()}
 
     ## Notes for AI Agents
-    - Times are UTC. Convert to the user's timezone for display.
+    - The database always stores/queries UTC. The API returns UTC.
+      #{display_timezone_note()}
     - When you finish a task or need user input, run `sapo notify "<short message>"` —
       per-session suppression is handled automatically via SAPO_SESSION_ID.
     - Files written under a utility's storage directory appear in the
@@ -122,6 +123,16 @@ defmodule SapoCore.AiContext do
 
       _ ->
         ""
+    end
+  end
+
+  defp display_timezone_note do
+    case SapoCore.Time.display_timezone() do
+      "Etc/UTC" ->
+        "The UI also displays times in UTC (services.sapohub.timezone is unset/default)."
+
+      tz ->
+        "The UI displays times in #{tz} (services.sapohub.timezone) — convert accordingly if quoting a time back to the user."
     end
   end
 end

@@ -218,7 +218,7 @@
         hardwareDir = ./hardware;
         sshKey = "ssh-ed25519 AAAA..."; # CHANGE ME — your SSH public key
         modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
-        depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
+        depsHash = "sha256-xNO7J5/zhUsQF2Wu1uhuemj0GnjXc77fG4i4pADTx9w=";
         npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
       };
 
@@ -228,7 +228,7 @@
           built = self.lib.mkSapoHub {
             inherit system;
             modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
-            depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
+            depsHash = "sha256-xNO7J5/zhUsQF2Wu1uhuemj0GnjXc77fG4i4pADTx9w=";
             npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
           };
         in {
@@ -246,7 +246,7 @@
           built = self.lib.mkSapoHub {
             inherit system;
             modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
-            depsHash = "sha256-2gMs2ZCx1FHah25Zm/vYlSt5TQEZyZ92jHd3u1o6iW4=";
+            depsHash = "sha256-xNO7J5/zhUsQF2Wu1uhuemj0GnjXc77fG4i4pADTx9w=";
             npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
           };
         in

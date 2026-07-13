@@ -83,6 +83,14 @@ if config_env() == :prod do
   # AI context can embed `sapo --help`.
   config :sapo_core, sapo_cli_path: System.get_env("SAPO_CLI_PATH")
 
+  # Display timezone (nix option services.sapohub.timezone, default
+  # "Etc/UTC"). The DB always stores/queries in UTC; this is ONLY consulted
+  # when rendering a time for a human (SapoCore.Time.local/1). A bad/unknown
+  # IANA name here is a config error, not a boot-time crash — validated at
+  # read time in SapoCore.Time so one bad string can't take the whole app
+  # down; it just falls back to UTC display with a logged warning.
+  config :sapo_core, display_timezone: System.get_env("DISPLAY_TIMEZONE") || "Etc/UTC"
+
   # UI prefs: nix-declared base + instantly-editable local overlay
   # (synced back into the config repo by sapohub-deploy).
   config :sapo_core,

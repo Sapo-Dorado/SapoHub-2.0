@@ -184,7 +184,9 @@ defmodule StorageWeb.Live.Index do
   defp format_size(bytes), do: "#{Float.round(bytes / 1024 / 1024 / 1024, 2)} GB"
 
   defp format_mtime(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%Y-%m-%d %H:%M")
+    # File mtimes come from the filesystem as UTC; render in the
+    # instance's configured display timezone (services.sapohub.timezone).
+    SapoKit.Time.format(dt, "%Y-%m-%d %H:%M")
   end
 
   defp classify(name) do

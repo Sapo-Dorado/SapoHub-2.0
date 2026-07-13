@@ -11,6 +11,15 @@ config :sapo_core,
   ecto_repos: [SapoCore.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# Named-timezone support (America/Los_Angeles etc) for display purposes only
+# — the DB always stores UTC, this just lets the UI shift it on render. No
+# network access needed: tzdata ships its own release database, and
+# autoupdate is disabled since this box may have no route to the update
+# server (and even if it did, an unattended DB swap on a deployed server
+# isn't something we want happening outside a real deploy).
+config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
+config :tzdata, :autoupdate, :disabled
+
 # Point the module kit facades (used by util modules) at core's infrastructure.
 config :sapo_module_kit,
   repo: SapoCore.Repo,
@@ -20,7 +29,8 @@ config :sapo_module_kit,
   http: SapoCore.HTTP,
   storage: SapoCore.Storage,
   scheduler: SapoCore.Scheduler,
-  module_config: SapoCore.ModuleConfig
+  module_config: SapoCore.ModuleConfig,
+  time: SapoCore.Time
 
 # Configures the endpoint
 config :sapo_core, SapoCoreWeb.Endpoint,

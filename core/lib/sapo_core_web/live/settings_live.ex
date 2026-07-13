@@ -688,9 +688,12 @@ defmodule SapoCoreWeb.SettingsLive do
   defp format_size(bytes) when bytes >= 1024, do: "#{div(bytes, 1024)} KB"
   defp format_size(bytes), do: "#{bytes} B"
 
-  # Server has no reliable notion of the browser's timezone, so this is
-  # shown in UTC (explicitly labeled) rather than guessing wrong.
+  # Shown in the instance's configured display timezone
+  # (services.sapohub.timezone, default UTC) rather than the browser's —
+  # this page is about the server's own deploy history, and the server has
+  # no reliable notion of the browser's timezone anyway.
   defp format_deploy_time(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%b %-d, %Y %H:%M UTC")
+    local = SapoCore.Time.local(dt)
+    Calendar.strftime(local, "%b %-d, %Y %H:%M") <> " " <> local.zone_abbr
   end
 end

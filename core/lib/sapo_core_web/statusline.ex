@@ -86,7 +86,7 @@ defmodule SapoCoreWeb.Statusline do
       <span :if={@right} class="text-[#86948F] pr-3.5 mr-3.5 border-r border-[#242D31]">
         {@right}
       </span>
-      <span class="text-[#86948F]">{Calendar.strftime(DateTime.utc_now(), "%H:%M")} UTC</span>
+      <span class="text-[#86948F]">{local_clock()}</span>
       <.link
         navigate="/settings"
         aria-label="Settings"
@@ -101,4 +101,12 @@ defmodule SapoCoreWeb.Statusline do
   defp level_class(:ok), do: "text-[#7FB069]"
   defp level_class(:warn), do: "text-[#E0A458]"
   defp level_class(_), do: "text-[#86948F]"
+
+  # "HH:MM ZONE" in the configured display timezone (services.sapohub.timezone,
+  # default UTC). Uses the shifted DateTime's own zone_abbr (e.g. "PST"/"PDT")
+  # rather than the raw IANA name, so it reads the way a clock actually would.
+  defp local_clock do
+    local = DateTime.utc_now() |> SapoCore.Time.local()
+    Calendar.strftime(local, "%H:%M") <> " " <> local.zone_abbr
+  end
 end
