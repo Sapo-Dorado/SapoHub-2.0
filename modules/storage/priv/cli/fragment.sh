@@ -1,28 +1,14 @@
-# SapoHub CLI fragment: storage module
+# SapoHub CLI escape hatch: storage module.
 #
-# Extends (overrides) core's base `sapo storage` command with `upload`,
-# since uploading requires this module's own /storage/upload API route to
-# actually be mounted. Fragments load after core.sh, so this definition
-# simply replaces the base list/get/delete-only version when the module is
-# enabled; when disabled, core's base version (no upload) is used instead.
+# priv/cli/commands.exs declares list/get/delete generically; `upload`
+# needs a raw multipart request tied to this module's own /storage/upload
+# route, which isn't one of SapoCliGen's standard verbs. The generated
+# sapo_cmd_storage dispatcher's fallback arm calls sapo_cmd_storage_ext for
+# any action it doesn't recognize — this is that.
 
-sapo_cmd_storage() {
-  local action="${1:-list}"
-  shift || true
+sapo_cmd_storage_ext() {
+  local action="$1"; shift || true
   case "$action" in
-    list) api_get /storage/files ;;
-    get)
-      local path="${1:-}"
-      [ -n "$path" ] || die "usage: sapo storage get <path> [-o <file>]"
-      shift
-      if [ "${1:-}" = "-o" ]; then
-        curl -sS -o "$2" "$SAPO_API_BASE/storage/files/$path"
-      else
-        curl -sS "$SAPO_API_BASE/storage/files/$path"
-      fi
-      ;;
-    delete) [ -n "${1:-}" ] || die "usage: sapo storage delete <path>"
-      api_delete "/storage/files/$1" ;;
     upload)
       local file="${1:-}"
       [ -n "$file" ] || die "usage: sapo storage upload <file>"

@@ -1,15 +1,16 @@
 defmodule Mix.Tasks.Sapo.Gen.Cli do
-  @shortdoc "Assemble the sapo CLI from core + enabled module fragments"
+  @shortdoc "Assemble the sapo CLI from core + enabled module commands"
 
   @moduledoc """
-  Concatenates `priv/cli/core.sh` with each enabled module's
-  `priv/cli/fragment.sh` (from the modules lock file) and a final dispatch
-  line into an executable `sapo` script.
+  Assembles `priv/cli/core.sh`, each enabled module's generated commands
+  (from `priv/cli/commands.exs` — see `SapoCliGen`), and each module's
+  optional raw `priv/cli/fragment.sh` escape hatch (from the modules lock
+  file), plus a final dispatch line, into an executable `sapo` script.
 
       mix sapo.gen.cli            # writes _build/<env>/sapo
 
-  In releases, nix/cli.nix performs the same assembly into a
-  `writeShellScriptBin` (M6); this task is the dev equivalent.
+  In releases, nix/compose.nix runs this same task inside the release build
+  (M6) so there is exactly one place commands.exs -> bash codegen happens.
   """
 
   use Mix.Task
@@ -24,18 +25,31 @@ defmodule Mix.Tasks.Sapo.Gen.Cli do
 
     {modules, _binding} = Code.eval_file(lock)
 
-    fragments =
-      for {app, path} <- modules,
-          fragment_path =
-            Path.expand(Path.join(path, "priv/cli/fragment.sh"), Path.dirname(lock)),
-          File.exists?(fragment_path) do
-        {app, File.read!(fragment_path)}
+    contributions =
+      for {app, path} <- modules do
+        base = Path.expand(path, Path.dirname(lock))
+        commands_path = Path.join(base, "priv/cli/commands.exs")
+        fragment_path = Path.join(base, "priv/cli/fragment.sh")
+
+        generated =
+          if File.exists?(commands_path) do
+            {resources, _binding} = Code.eval_file(commands_path)
+            SapoCliGen.generate(resources)
+          else
+            ""
+          end
+
+        raw = if File.exists?(fragment_path), do: File.read!(fragment_path), else: ""
+
+        contributed? = generated != "" or raw != ""
+        {app, Enum.join([generated, raw], "\n"), contributed?}
       end
+      |> Enum.filter(&elem(&1, 2))
 
     core = File.read!(Path.join(File.cwd!(), "priv/cli/core.sh"))
 
     script =
-      [core | Enum.map(fragments, &elem(&1, 1))]
+      [core | Enum.map(contributions, &elem(&1, 1))]
       |> Enum.join("\n")
       |> Kernel.<>("\nsapo_main \"$@\"\n")
 
@@ -45,7 +59,8 @@ defmodule Mix.Tasks.Sapo.Gen.Cli do
 
     Mix.shell().info(
       "sapo CLI written to #{dest} " <>
-        "(#{length(fragments)} module fragment(s): #{Enum.map_join(fragments, ", ", &elem(&1, 0))})"
+        "(#{length(contributions)} module contribution(s): " <>
+        "#{Enum.map_join(contributions, ", ", &elem(&1, 0))})"
     )
   end
 end

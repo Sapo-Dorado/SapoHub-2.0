@@ -74,7 +74,7 @@ defmodule Mix.Tasks.Sapo.Gen.Module do
       "lib/#{name}.ex" => context_ex(module),
       "lib/#{name}_web/live/index.ex" => live_index(module, title),
       "priv/migrations/.gitkeep" => "",
-      "priv/cli/fragment.sh" => cli_fragment(name),
+      "priv/cli/commands.exs" => cli_commands(name),
       "assets/hooks.js" => hooks_js()
     }
   end
@@ -214,19 +214,37 @@ defmodule Mix.Tasks.Sapo.Gen.Module do
     """
   end
 
-  defp cli_fragment(name) do
+  defp cli_commands(name) do
     """
-    # SapoHub CLI fragment: #{name} module
-    # Define sapo_cmd_<resource> functions and append to SAPO_CLI_HELP.
-    # Delete this file if the module has no CLI commands.
-
-    # SAPO_CLI_HELP+="
-    #   #{name}    ...
-    # "
+    # SapoHub CLI commands: #{name} module (declarative — see SapoCliGen).
     #
-    # sapo_cmd_#{name}() {
-    #   ...
-    # }
+    # Each entry becomes a `sapo <name> <action> ...` subcommand, generated
+    # into plain bash by `mix sapo.gen.cli`. Delete this file (and the
+    # priv/cli/ directory) if the module has no CLI commands.
+    #
+    # Supported verbs: :list, :show, :create, :update, :delete, :upload —
+    # see core/lib/mix/sapo_cli_gen.ex's moduledoc for the full spec format.
+    # If an action doesn't fit these verbs (a raw multipart request, a
+    # custom response shape, ...), leave it out here and instead define
+    # `sapo_cmd_#{name}_ext()` in priv/cli/fragment.sh — the generated
+    # dispatcher's fallback arm calls it automatically.
+    #
+    # Example:
+    #
+    # [
+    #   %{
+    #     name: "#{name}",
+    #     help: "list | show <id> | create <title> | delete <id>",
+    #     actions: [
+    #       %{action: "list", verb: :list, path: "/#{name}"},
+    #       %{action: "show", verb: :show, path: "/#{name}/:id"},
+    #       %{action: "create", verb: :create, path: "/#{name}", args: [:title]},
+    #       %{action: "delete", verb: :delete, path: "/#{name}/:id"}
+    #     ]
+    #   }
+    # ]
+
+    []
     """
   end
 

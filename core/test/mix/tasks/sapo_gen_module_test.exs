@@ -9,7 +9,7 @@ defmodule Mix.Tasks.Sapo.Gen.ModuleTest do
     assert Map.has_key?(files, "mix.exs")
     assert Map.has_key?(files, "lib/my_thing/module.ex")
     assert Map.has_key?(files, "lib/my_thing_web/live/index.ex")
-    assert Map.has_key?(files, "priv/cli/fragment.sh")
+    assert Map.has_key?(files, "priv/cli/commands.exs")
     assert Map.has_key?(files, "assets/hooks.js")
 
     assert files["mix.exs"] =~ "app: :my_thing"
