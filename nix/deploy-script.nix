@@ -158,12 +158,16 @@ let
     esac
   done
 
-  # Stage a snapshot for boot-time restore (root-owned copy; the app's
-  # Release.maybe_restore consumes it in ExecStartPre).
+  # Stage a snapshot for boot-time restore. This script runs as root, but
+  # Release.maybe_restore runs in ExecStartPre as the sapohub service user
+  # (User=sapohub in the systemd unit) — so the staged file must be owned
+  # by that user, not root, or the restore fails with a permission error
+  # the moment the service actually tries to read it back.
   if [ -n "$SNAPSHOT" ]; then
     [ -f "$SNAPSHOT" ] || { echo "snapshot not found: $SNAPSHOT" >&2; exit 1; }
     mkdir -p "$STATE_DIR/db/restore"
     cp "$SNAPSHOT" "$STATE_DIR/db/restore/pending.tar.gz"
+    chown sapohub:sapohub "$STATE_DIR/db/restore/pending.tar.gz"
     chmod 600 "$STATE_DIR/db/restore/pending.tar.gz"
     echo "snapshot staged for restore on next boot"
   fi
