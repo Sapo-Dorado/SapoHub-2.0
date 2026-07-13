@@ -92,6 +92,19 @@ Preconditions to check with the user before running it:
    in `/var/lib/tailscale` across every future `nixos-rebuild`/redeploy,
    it doesn't need repeating.
 
+   On the manual `tailscale up` path specifically: at first boot, before
+   Tailscale is joined, `sapohub-tailscale-cert` (fetches the box's
+   Tailscale HTTPS cert for nginx) has nothing to fetch a cert from and
+   fails; nginx's `ExecStartPre` then fails too and systemd gives up
+   after its retry budget, leaving both services sitting `failed`
+   (nginx) / `inactive (dead)` (start-limit-hit) — they do NOT
+   self-heal once Tailscale later joins. After the user approves the
+   `tailscale up` login, restart both by hand: `systemctl restart
+   sapohub-tailscale-cert; systemctl reset-failed nginx; systemctl
+   restart nginx`. This is expected on this path, not a bug — the
+   auth-key path avoids it entirely because Tailscale is already up
+   before the cert/nginx units ever get their first chance to start.
+
 The script asks for IP re-confirmation immediately before the
 destructive nixos-anywhere run — don't route around that by scripting
 the confirmation input; let the user actually see and confirm it.
@@ -251,6 +264,16 @@ SSH in and run it directly, or use the Settings page's Deploy button (adds
 `--sync-prefs`). `nix/deploy-script.nix` is the actual implementation if
 you need to understand exactly what it does — it's short and heavily
 commented; read it rather than guessing at its behavior.
+
+`sapohub-deploy --snapshot <file>` stages a snapshot for restore on the
+service's next start (`Release.maybe_restore` runs in `ExecStartPre`,
+as the `sapohub` service user — not root). The script chowns the staged
+file to `sapohub:sapohub` before handing off, precisely because that
+restore step can't read a root-owned file; if this regresses, the
+symptom is the service crash-looping right after a `--snapshot` deploy
+with `Permission denied` in `journalctl -u sapohub`, not anything
+visible in the deploy script's own output (it reports success before
+the file is ever read).
 
 ## What NOT to do
 
