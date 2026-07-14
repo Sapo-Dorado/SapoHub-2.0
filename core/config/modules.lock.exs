@@ -7,5 +7,6 @@
 [
   {:sapo_hello, "../../modules/hello"},
   {:my_plate, "../../modules/my_plate"},
-  {:storage, "../../modules/storage"}
+  {:storage, "../../modules/storage"},
+  {:reminders, "../../modules/reminders"}
 ]
