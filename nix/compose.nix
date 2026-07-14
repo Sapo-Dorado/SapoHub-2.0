@@ -9,7 +9,24 @@
 #     config        = { };                   # module config (registry)
 #     cliFragment   = true;                  # has priv/cli/fragment.sh
 #     jsHooks       = false;                 # has assets/hooks.js
+#     hostPackages  = pkgs: [ pkgs.yt-dlp ]; # OPTIONAL: host binaries this
+#                                             # module needs on PATH. A
+#                                             # function, not a plain list,
+#                                             # so a module never needs its
+#                                             # own nixpkgs input just to
+#                                             # reach into pkgs — see
+#                                             # lib.mkSapoHub in flake.nix,
+#                                             # which resolves it against
+#                                             # this build's own pkgs and
+#                                             # folds the result into
+#                                             # services.sapohub.hostPackages
+#                                             # (nixos-module.nix: systemPackages
+#                                             # + the sapohub.service PATH).
+#                                             # Omit entirely if not needed.
 #   }
+#
+# hostPackages is NOT consumed here (compose.nix only builds the Elixir
+# release) — it's read directly off `modules` by lib.mkSapoHub, see flake.nix.
 #
 # Codegen (postPatch, overwriting the checked-in dev defaults):
 #   core/config/modules.lock.exs   - [{app, source_path}] for mix.exs deps

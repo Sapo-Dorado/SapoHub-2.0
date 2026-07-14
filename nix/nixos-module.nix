@@ -64,6 +64,20 @@ in
       description = "The composed sapo CLI (lib.mkSapoHub).";
     };
 
+    hostPackages = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      description = ''
+        Extra host binaries required by enabled util modules (e.g. yt-dlp,
+        print-proxy-prep) — the `hostPackages` output of lib.mkSapoHub,
+        already resolved from each module's own `hostPackages` descriptor
+        field against this build's own `pkgs`. Folded into both
+        environment.systemPackages and the sapohub.service PATH, so a
+        module that declares one of these never needs the CONFIG REPO to
+        separately remember to install it.
+      '';
+    };
+
     port = mkOption { type = types.port; default = 4000; };
     host = mkOption { type = types.str; default = "localhost"; };
     scheme = mkOption { type = types.enum [ "http" "https" ]; default = "http"; };
@@ -274,7 +288,7 @@ in
         ];
       }];
 
-      environment.systemPackages = [ cfg.cliPackage deployScript setSecretScript ];
+      environment.systemPackages = [ cfg.cliPackage deployScript setSecretScript ] ++ cfg.hostPackages;
 
       # Nix-declared prefs base; the app overlays local UI edits on top.
       environment.etc."sapohub/prefs.json".text = builtins.toJSON cfg.prefs;
@@ -338,13 +352,19 @@ in
           # bit set" (seen in practice: this broke the Settings page's
           # secret-save flow, since System.find_executable("sudo") was
           # picking up the store path off this same PATH).
+          # cfg.hostPackages (module-contributed host binaries, e.g. yt-dlp,
+          # print-proxy-prep) come after cliPackage and before the fixed
+          # core toolset below — nothing here should collide with those,
+          # but core wins on a name clash either way (makeBinPath keeps
+          # first-listed on PATH first).
           PATH = lib.mkForce
-            "/run/wrappers/bin:${lib.makeBinPath [
+            "/run/wrappers/bin:${lib.makeBinPath ([
               claudeWrapper
               cfg.cliPackage
+            ] ++ cfg.hostPackages ++ [
               pkgs.bash pkgs.coreutils pkgs.git pkgs.curl pkgs.jq
               pkgs.gnutar pkgs.gzip pkgs.openssh pkgs.systemd
-            ]}:/run/current-system/sw/bin";
+            ])}:/run/current-system/sw/bin";
         };
 
         serviceConfig = {

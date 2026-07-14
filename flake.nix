@@ -48,6 +48,12 @@
             inherit modules depsHash npmDepsHash;
           };
           cli = mkCli { src = self; inherit modules apiBase; };
+          # Each module MAY declare `hostPackages = pkgs: [ ... ];` — a
+          # function (not a plain list) so a module never needs its own
+          # nixpkgs input just to reach `pkgs.yt-dlp`; it gets the SAME
+          # pkgs set this build already resolved for `system`. Modules
+          # that don't need any host binary just omit the field.
+          hostPackages = nixpkgs.lib.concatMap (m: (m.hostPackages or (_: [ ])) pkgs) modules;
         };
 
       # ── Fresh-machine (nixos-anywhere) host builder ─────────────────────────
@@ -147,6 +153,7 @@
                   enable = true;
                   package = built.package;
                   cliPackage = built.cli;
+                  hostPackages = built.hostPackages;
                   inherit secretsFile;
                   assistant.claudePackage = flakePkgs.claude-code;
                   tailscale = {
@@ -290,6 +297,7 @@
                 enable = true;
                 package = built.package;
                 cliPackage = built.cli;
+                hostPackages = built.hostPackages;
                 host = "localhost";
                 port = 4000;
                 secretsFile = "/etc/sapohub-secrets.env";

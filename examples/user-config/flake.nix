@@ -73,6 +73,7 @@
             enable = true;
             package = hub.package;
             cliPackage = hub.cli;
+            hostPackages = hub.hostPackages; # host binaries your modules declared (yt-dlp, etc.)
             host = "my-host.example";
             port = 4000;
             # secretsFile and deploy.flakePath already default to
