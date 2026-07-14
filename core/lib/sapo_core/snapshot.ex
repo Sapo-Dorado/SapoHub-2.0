@@ -35,7 +35,7 @@ defmodule SapoCore.Snapshot do
     ts = Calendar.strftime(DateTime.utc_now(), "%Y%m%d-%H%M%S")
     archive = Path.join(dir, "sapohub-#{ts}.tar.gz")
 
-    tmp = Path.join(System.tmp_dir!(), "sapohub-snapshot-#{System.unique_integer([:positive])}")
+    tmp = Path.join(SapoCore.tmp_dir!(), "sapohub-snapshot-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
 
     try do
@@ -128,7 +128,7 @@ defmodule SapoCore.Snapshot do
     db_path = db_path || Application.fetch_env!(:sapo_core, SapoCore.Repo)[:database]
     storage_root = storage_root || Application.fetch_env!(:sapo_core, :storage_root)
 
-    tmp = Path.join(System.tmp_dir!(), "sapohub-restore-#{System.unique_integer([:positive])}")
+    tmp = Path.join(SapoCore.tmp_dir!(), "sapohub-restore-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
 
     try do

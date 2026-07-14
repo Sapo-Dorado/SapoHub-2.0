@@ -51,10 +51,6 @@ defmodule SapoCore.Release do
     :ok
   end
 
-  # Fresh every boot -- nothing here is meant to persist. Rebuilt from the
-  # Nix-store originals each time migration_paths/0 runs.
-  @scratch_root Path.join(System.tmp_dir!(), "sapohub-migrations")
-
   @doc """
   Core's migrations dir plus each enabled module's `migrations_path/0`,
   namespaced by module id so two modules can never collide on version,
@@ -63,10 +59,11 @@ defmodule SapoCore.Release do
   youtube_download both shipping `20260713120000`).
 
   Migration files live in the read-only Nix store, so they're copied into
-  a scratch directory under `System.tmp_dir!/0` with the version rewritten
-  to `<original-version><3-digit-module-tag>` (tag = `rem(crc32(id), 900)
-  + 100`) before being handed to `Ecto.Migrator`. File CONTENT is
-  untouched -- only the filename Ecto parses the version from changes.
+  a scratch directory under `SapoCore.tmp_dir!/0` with the version
+  rewritten to `<original-version><3-digit-module-tag>` (tag =
+  `rem(crc32(id), 900) + 100`) before being handed to `Ecto.Migrator`.
+  File CONTENT is untouched -- only the filename Ecto parses the version
+  from changes.
   """
   def migration_paths do
     core = Application.app_dir(@app, "priv/repo/migrations")
@@ -88,11 +85,12 @@ defmodule SapoCore.Release do
   end
 
   defp namespace_migrations(entries) do
-    File.rm_rf!(@scratch_root)
+    scratch_root = Path.join(SapoCore.tmp_dir!(), "sapohub-migrations")
+    File.rm_rf!(scratch_root)
 
     Enum.map(entries, fn {id, path} ->
       tag = module_tag(id)
-      dest = Path.join(@scratch_root, Atom.to_string(id))
+      dest = Path.join(scratch_root, Atom.to_string(id))
       File.mkdir_p!(dest)
 
       path
