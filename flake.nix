@@ -202,6 +202,15 @@
           cliFragment = true;
           jsHooks = false;
         };
+        projects = {
+          name = "projects";
+          app = "projects";
+          src = ./modules/projects;
+          elixirModule = "Projects.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = true;
+        };
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
