@@ -98,14 +98,42 @@ have module secrets beyond just `SECRET_KEY_BASE` — Telegram bot tokens,
 etc. — see each module's docs for what it expects in that file).
 
 One core (non-module) secret worth knowing about: `GITHUB_TOKEN`,
-optional, used only by `sapohub-deploy --sync-prefs` (the Settings
-page's Deploy button) to push the config-repo commit it makes when
-syncing UI preferences back into git. Without it, that commit still
-happens locally, it just can't push — the Settings page's Secrets
-table flags it "missing" and disables Deploy until it's set. Generate
-a **fine-grained personal access token** (not classic — classic tokens
-are all-or-nothing across every repo you can access, more than this
-needs):
+optional, used two ways by `sapohub-deploy`:
+
+1. `--sync-prefs` (the Settings page's Deploy button) uses it to push
+   the config-repo commit it makes when syncing UI preferences back
+   into git. Without it, that commit still happens locally, it just
+   can't push — the Settings page's Secrets table flags it "missing"
+   and disables Deploy until it's set.
+2. If your config's flake pulls in a **private** module repo (e.g. a
+   personal modules repo referenced as `github:you/your-modules`),
+   `sapohub-deploy` also exports it as a Nix `access-tokens` credential
+   (`NIX_CONFIG="access-tokens = github.com=$GITHUB_TOKEN"`) before
+   running `nixos-rebuild switch`, so Nix's own flake-input fetcher can
+   authenticate that fetch. Without it, a redeploy that references a
+   private module input fails cleanly — `nixos-rebuild switch` errors
+   fetching that input, the previous generation stays active, nothing
+   is disrupted — but the redeploy won't succeed until the token is
+   set. This only matters for `github:` inputs; a `git+ssh://` input
+   needs a real SSH identity for whichever user runs the fetch instead,
+   which is a separate, unrelated setup this token doesn't cover.
+
+   **This does NOT help initial provisioning.** `bootstrap.sh` runs
+   `nixos-anywhere` locally — it builds the closure on whatever machine
+   you run the script from, not on the target — so the target's seeded
+   `secrets.env` (and therefore this token) isn't in the picture yet at
+   that point. If your config already references a private module
+   before you've ever bootstrapped, your *own local* Nix needs
+   credentials for it first: either an SSH agent with access for a
+   `git+ssh://` input, or `access-tokens = github.com=<token>` in your
+   own `~/.config/nix/nix.conf` (or `NIX_CONFIG` in your shell) for a
+   `github:` input. Once the machine is up, subsequent redeploys go
+   through `sapohub-deploy` on the target instead, which is what the
+   `GITHUB_TOKEN` in `secrets.env` actually covers.
+
+Generate a **fine-grained personal access token** (not classic —
+classic tokens are all-or-nothing across every repo you can access,
+more than this needs):
 
 1. GitHub → Settings → Developer settings → Personal access tokens →
    Fine-grained tokens → Generate new token

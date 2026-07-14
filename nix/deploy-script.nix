@@ -39,6 +39,17 @@ let
     # included, so this was never actually affected by the BEAM-inherited
     # SIG_IGN that broke the outer script.
     export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.nixos-rebuild ]}:$PATH"
+    # Authenticate nix's own flake-input fetcher for the `github:` scheme
+    # (private repos, e.g. a personal modules repo consumed as a flake
+    # input). Distinct from the GITHUB_TOKEN use above, which shells out to
+    # `git` directly with a token-embedded HTTPS URL for the prefs push —
+    # this one has to go through Nix's own access-tokens mechanism because
+    # `nixos-rebuild switch` fetches flake inputs itself, not via a plain
+    # `git` invocation. No-op (empty token) when GITHUB_TOKEN isn't set —
+    # public-only flake inputs keep working exactly as before.
+    if [ -n "''${GITHUB_TOKEN:-}" ]; then
+      export NIX_CONFIG="access-tokens = github.com=$GITHUB_TOKEN"
+    fi
     NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     if nixos-rebuild switch --flake "$FLAKE_PATH#$FLAKE_ATTR"; then
       STATUS=success
@@ -291,6 +302,7 @@ let
     --setenv=FLAKE_PATH="$FLAKE_PATH" \
     --setenv=FLAKE_ATTR="$FLAKE_ATTR" \
     --setenv=STATUS_FILE="$STATUS_FILE" \
+    --setenv=GITHUB_TOKEN="$GITHUB_TOKEN" \
     ${runRebuild}
 
   # Stream the journal live for the browser terminal, but only for as
