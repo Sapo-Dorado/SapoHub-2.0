@@ -4,18 +4,22 @@ defmodule Projects.Git do
   the system `git` binary — same assumption v1 made (no extra deps beyond
   `:sapo_module_kit` allowed, so this can't reach for a git library).
 
-  OPEN QUESTION (not resolved by this migration): v1's `flake.nix` wires a
-  per-deployment git commit identity (`user.name`/`user.email`) and GitHub
-  SSH authentication (`GIT_SSH_COMMAND` + an HTTPS→SSH `insteadOf` URL
-  rewrite) into the systemd service environment, so pushes/clones of private
-  repos work out of the box. v2's `nix/nixos-module.nix` has none of this —
-  no git identity, no SSH key wiring, no URL rewrite. As shipped, this module
-  will happily clone/pull public repos over HTTPS and commit locally (using
-  whatever ambient git config the host happens to have, or none), but it has
-  no declared way to authenticate pushes or clone private repos in a real
-  deployment. What identity to bake in and how to supply SSH credentials
-  declaratively is a scope decision for the user, not something this
-  migration should guess at.
+  Authenticated pushes/clones reuse the SAME `GITHUB_TOKEN` secret core
+  already defines for `sapohub-deploy` (see `nix/nixos-module.nix` and
+  `nix/deploy-script.nix`) — it's set in the service's `EnvironmentFile`,
+  so it's already present in this app's own environment; no new secret
+  plumbing needed. Mirrors `deploy-script.nix`'s exact approach: build a
+  one-off `https://x-access-token:$GITHUB_TOKEN@...` URL and pass it only
+  as the explicit push/clone target, never persisted into `.git/config` or
+  `git remote -v` output. Optional — with no token set, public HTTPS
+  clone/pull/commit still work exactly as before; only pushes and private
+  clones need it, same degrade-gracefully behavior as the deploy path.
+  There is still no git commit identity wired in beyond whatever ambient
+  `user.name`/`user.email` the host has (or none, which only matters if
+  this module ever needs to author a commit itself, not just push existing
+  ones — `initialize_if_empty/1`'s README commit is the one exception, and
+  reuses `sapohub-projects`/`sapohub-projects@localhost` like
+  `deploy-script.nix` does for its own automated commit).
   """
 
   alias Projects.Disk
@@ -25,7 +29,7 @@ defmodule Projects.Git do
     source = Disk.source_path(name)
 
     with {:ok, _} <- File.rm_rf(source) do
-      run_git(Disk.project_root(name), ["clone", github_url, "source"])
+      run_git(Disk.project_root(name), ["clone", authed_url(github_url), "source"])
     else
       {:error, reason, _path} -> {:error, "Failed to remove source dir: #{reason}"}
     end
@@ -48,8 +52,17 @@ defmodule Projects.Git do
 
         with :ok <- File.write(readme_path, "# #{name}\n"),
              {:ok, _} <- run_git(source, ["add", "README.md"]),
-             {:ok, _} <- run_git(source, ["commit", "-m", "Initial commit"]),
-             {:ok, _} <- run_git(source, ["push", "-u", "origin", "HEAD"]) do
+             {:ok, _} <-
+               run_git(source, [
+                 "-c",
+                 "user.name=sapohub-projects",
+                 "-c",
+                 "user.email=sapohub-projects@localhost",
+                 "commit",
+                 "-m",
+                 "Initial commit"
+               ]),
+             {:ok, _} <- push(source, ["-u", "origin", "HEAD"]) do
           {:ok, :initialized}
         end
     end
@@ -128,9 +141,49 @@ defmodule Projects.Git do
   defp push_if_ahead(_source, 0), do: {:ok, :nothing_to_push}
 
   defp push_if_ahead(source, _ahead) do
-    case run_git(source, ["push"]) do
+    case push(source, []) do
       {:ok, output} -> {:ok, output}
       {:error, reason} -> {:error, "Push failed: #{reason}"}
+    end
+  end
+
+  # Pushes over an authenticated URL built just for this one push when
+  # GITHUB_TOKEN is set — never written to .git/config, never visible in
+  # `git remote -v`. Falls back to a bare `git push` (relying on ambient
+  # git config/credential helper, if any) when no token is set, exactly
+  # like `deploy-script.nix`'s own push step.
+  defp push(source, extra_args) do
+    case System.get_env("GITHUB_TOKEN") do
+      token when is_binary(token) and token != "" ->
+        case run_git(source, ["remote", "get-url", "origin"]) do
+          {:ok, remote_url} ->
+            run_git(source, ["push", authed_url(String.trim(remote_url)) | extra_args])
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      _ ->
+        run_git(source, ["push" | extra_args])
+    end
+  end
+
+  # Rewrites an `https://` remote URL to embed an `x-access-token`
+  # credential from GITHUB_TOKEN, matching deploy-script.nix's approach
+  # exactly. Non-HTTPS URLs (e.g. git@github.com: SSH remotes) are
+  # returned unchanged — there's no token-based auth to add there.
+  @doc false
+  def authed_url(url) do
+    case System.get_env("GITHUB_TOKEN") do
+      token when is_binary(token) and token != "" ->
+        if String.starts_with?(url, "https://") do
+          String.replace(url, "https://", "https://x-access-token:#{token}@", global: false)
+        else
+          url
+        end
+
+      _ ->
+        url
     end
   end
 
@@ -145,8 +198,24 @@ defmodule Projects.Git do
 
   defp run_git(cwd, args) do
     case System.cmd("git", args, cd: cwd, stderr_to_stdout: true) do
-      {output, 0} -> {:ok, output}
-      {output, _code} -> {:error, output}
+      {output, 0} -> {:ok, scrub(output)}
+      {output, _code} -> {:error, scrub(output)}
+    end
+  end
+
+  # Belt-and-suspenders: modern git already redacts credentials embedded
+  # in a URL when it prints one back (e.g. clone/push error output), but
+  # that's not something this module should rely on — scrub any literal
+  # occurrence of the token out of everything git hands back to us,
+  # since this output can end up in API responses and live-streamed
+  # script/sync output (Projects.Runner), not just logs.
+  defp scrub(output) do
+    case System.get_env("GITHUB_TOKEN") do
+      token when is_binary(token) and token != "" ->
+        String.replace(output, token, "***")
+
+      _ ->
+        output
     end
   end
 end
