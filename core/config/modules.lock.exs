@@ -8,5 +8,6 @@
   {:sapo_hello, "../../modules/hello"},
   {:my_plate, "../../modules/my_plate"},
   {:storage, "../../modules/storage"},
-  {:reminders, "../../modules/reminders"}
+  {:reminders, "../../modules/reminders"},
+  {:projects, "../../modules/projects"}
 ]

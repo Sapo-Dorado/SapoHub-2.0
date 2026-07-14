@@ -10,12 +10,12 @@ defmodule SapoCore.Generated.Registry do
 
   @doc "Enabled `SapoKit.Module` implementations, in dependency order."
   def modules do
-    [SapoHello.Module, MyPlate.Module, Storage.Module, Reminders.Module]
+    [SapoHello.Module, MyPlate.Module, Storage.Module, Reminders.Module, Projects.Module]
   end
 
   @doc "Per-module config maps, keyed by module id."
   def module_config do
-    %{sapo_hello: %{}, my_plate: %{}, storage: %{}, reminders: %{}}
+    %{sapo_hello: %{}, my_plate: %{}, storage: %{}, reminders: %{}, projects: %{}}
   end
 
   @doc "Config map for one module (empty map when unset)."

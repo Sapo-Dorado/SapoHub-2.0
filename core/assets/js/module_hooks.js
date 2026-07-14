@@ -3,5 +3,6 @@
 import SapoHelloHooks from "../../../modules/hello/assets/hooks.js";
 import MyPlateHooks from "../../../modules/my_plate/assets/hooks.js";
 import StorageHooks from "../../../modules/storage/assets/hooks.js";
+import ProjectsHooks from "../../../modules/projects/assets/hooks.js";
 
-export default Object.assign({}, SapoHelloHooks, MyPlateHooks, StorageHooks);
+export default Object.assign({}, SapoHelloHooks, MyPlateHooks, StorageHooks, ProjectsHooks);

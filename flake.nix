@@ -202,6 +202,24 @@
           cliFragment = true;
           jsHooks = false;
         };
+        projects = {
+          name = "projects";
+          app = "projects";
+          src = ./modules/projects;
+          elixirModule = "Projects.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = true;
+        };
+        reminders = {
+          name = "reminders";
+          app = "reminders";
+          src = ./modules/reminders;
+          elixirModule = "Reminders.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = false;
+        };
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
@@ -221,7 +239,7 @@
         hostname = "fresh-machine";
         hardwareDir = ./hardware;
         sshKey = "ssh-ed25519 AAAA..."; # CHANGE ME — your SSH public key
-        modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
+        modules = [ self.sapohubModules.hello self.sapohubModules.my_plate self.sapohubModules.reminders self.sapohubModules.projects ];
         depsHash = "sha256-xNO7J5/zhUsQF2Wu1uhuemj0GnjXc77fG4i4pADTx9w=";
         npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
       };
@@ -231,7 +249,7 @@
         let
           built = self.lib.mkSapoHub {
             inherit system;
-            modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
+            modules = [ self.sapohubModules.hello self.sapohubModules.my_plate self.sapohubModules.reminders self.sapohubModules.projects ];
             depsHash = "sha256-xNO7J5/zhUsQF2Wu1uhuemj0GnjXc77fG4i4pADTx9w=";
             npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
           };
@@ -249,7 +267,7 @@
           pkgs = nixpkgs.legacyPackages.${system};
           built = self.lib.mkSapoHub {
             inherit system;
-            modules = [ self.sapohubModules.hello self.sapohubModules.my_plate ];
+            modules = [ self.sapohubModules.hello self.sapohubModules.my_plate self.sapohubModules.reminders self.sapohubModules.projects ];
             depsHash = "sha256-xNO7J5/zhUsQF2Wu1uhuemj0GnjXc77fG4i4pADTx9w=";
             npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";
           };
