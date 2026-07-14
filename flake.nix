@@ -50,10 +50,15 @@
           cli = mkCli { src = self; inherit modules apiBase; };
           # Each module MAY declare `hostPackages = pkgs: [ ... ];` — a
           # function (not a plain list) so a module never needs its own
-          # nixpkgs input just to reach `pkgs.yt-dlp`; it gets the SAME
-          # pkgs set this build already resolved for `system`. Modules
-          # that don't need any host binary just omit the field.
-          hostPackages = nixpkgs.lib.concatMap (m: (m.hostPackages or (_: [ ])) pkgs) modules;
+          # nixpkgs input just to reach `pkgs.yt-dlp`. This is handed
+          # `toolsPkgs` (the nixos-unstable input, same one used for
+          # tailwind above), not the pinned `pkgs`, because host binaries
+          # like yt-dlp are exactly the case where a stale pinned nixpkgs
+          # is actively harmful — yt-dlp breaks against YouTube on a
+          # regular cadence, so modules that shell out to it need
+          # whatever's newest, not whatever's warm in the local store.
+          # Modules that don't need any host binary just omit the field.
+          hostPackages = nixpkgs.lib.concatMap (m: (m.hostPackages or (_: [ ])) toolsPkgs) modules;
         };
 
       # ── Fresh-machine (nixos-anywhere) host builder ─────────────────────────
