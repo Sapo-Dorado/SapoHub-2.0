@@ -51,32 +51,88 @@ defmodule SapoCore.Release do
     :ok
   end
 
+  # Fresh every boot -- nothing here is meant to persist. Rebuilt from the
+  # Nix-store originals each time migration_paths/0 runs.
+  @scratch_root Path.join(System.tmp_dir!(), "sapohub-migrations")
+
   @doc """
   Core's migrations dir plus each enabled module's `migrations_path/0`,
-  filtered to those that exist. Raises if two migration files share a
-  version number (modules must use full-timestamp versions).
+  namespaced by module id so two modules can never collide on version,
+  even by accident (e.g. a copy-pasted migration template that never got
+  its timestamp edited -- what actually happened with magic_proxies and
+  youtube_download both shipping `20260713120000`).
+
+  Migration files live in the read-only Nix store, so they're copied into
+  a scratch directory under `System.tmp_dir!/0` with the version rewritten
+  to `<original-version><3-digit-module-tag>` (tag = `rem(crc32(id), 900)
+  + 100`) before being handed to `Ecto.Migrator`. File CONTENT is
+  untouched -- only the filename Ecto parses the version from changes.
   """
   def migration_paths do
     core = Application.app_dir(@app, "priv/repo/migrations")
 
-    module_paths =
+    module_entries =
       for mod <- SapoCore.Generated.Registry.modules(),
           path = mod.migrations_path(),
           File.dir?(path) do
-        path
+        {mod.id(), path}
       end
 
-    paths = Enum.filter([core | module_paths], &File.dir?/1)
+    entries =
+      [{:core, core} | module_entries]
+      |> Enum.filter(fn {_id, path} -> File.dir?(path) end)
+
+    paths = namespace_migrations(entries)
     assert_unique_versions!(paths)
     paths
   end
 
+  defp namespace_migrations(entries) do
+    File.rm_rf!(@scratch_root)
+
+    Enum.map(entries, fn {id, path} ->
+      tag = module_tag(id)
+      dest = Path.join(@scratch_root, Atom.to_string(id))
+      File.mkdir_p!(dest)
+
+      path
+      |> File.ls!()
+      |> Enum.filter(&migration_file?/1)
+      |> Enum.each(fn file ->
+        [version, rest] = String.split(file, "_", parts: 2)
+        File.cp!(Path.join(path, file), Path.join(dest, "#{version}#{tag}_#{rest}"))
+      end)
+
+      dest
+    end)
+  end
+
+  # A module's own id is already required to be globally unique (it's the
+  # config key / table-name prefix, see SapoKit.Module.id/0), so hashing
+  # it is enough to keep two modules from landing on the same tag without
+  # needing any coordination between module authors.
+  defp module_tag(id) do
+    id
+    |> Atom.to_string()
+    |> :erlang.crc32()
+    |> rem(900)
+    |> Kernel.+(100)
+  end
+
+  # Migration files are named <digits>_<name>.exs -- excludes stray .exs
+  # files that don't follow that shape (e.g. .formatter.exs).
+  defp migration_file?(file), do: Regex.match?(~r/^\d+_.+\.exs$/, file)
+
+  # Backstop, not the primary defense: namespacing by module id makes a
+  # cross-module collision structurally near-impossible, but this still
+  # catches a hash collision between two modules' tags, or two migrations
+  # within the SAME module sharing a version (a real authoring mistake).
   defp assert_unique_versions!(paths) do
     paths
     |> Enum.flat_map(fn path ->
       path
       |> File.ls!()
-      |> Enum.filter(&String.ends_with?(&1, ".exs"))
+      |> Enum.filter(&migration_file?/1)
       |> Enum.map(fn file ->
         [version | _] = String.split(file, "_", parts: 2)
         {version, Path.join(path, file)}
@@ -87,8 +143,10 @@ defmodule SapoCore.Release do
       unless match?([_], entries) do
         files = Enum.map(entries, fn {_v, f} -> f end) |> Enum.join(", ")
 
-        raise "duplicate migration version #{version} across modules: #{files}. " <>
-                "Modules must use unique full-timestamp migration versions."
+        raise "duplicate migration version #{version}: #{files}. " <>
+                "Either two migrations in the same module share a version, " <>
+                "or two modules' tags collided (extremely unlikely) -- " <>
+                "pick a different version for one of them."
       end
     end)
   end

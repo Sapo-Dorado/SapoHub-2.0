@@ -76,17 +76,15 @@ another module) fail the build with both module names.
 
 ### Database — `SapoKit.Repo`
 Delegates to core's SQLite repo. Prefix your tables with your module id
-(`my_thing_items`), and `use SapoKit.Schema` for binary ids. SQLite
-notes: keep write transactions short.
+(`my_thing_items`), use `mix ecto.gen.migration` as normal, and
+`use SapoKit.Schema` for binary ids. SQLite notes: keep write
+transactions short.
 
-Generate migrations with `mix sapo.gen.migration create_my_thing_items`
-(from `sapo_module_kit`, so every module has it) instead of
-`mix ecto.gen.migration` — it versions the file as
-`<timestamp><3-digit-module-tag>` instead of a bare timestamp, so two
-modules picking the same second (or copy-pasting a template migration
-without editing it) can't collide even by accident. `SapoCore.Release`
-still asserts version uniqueness at boot as a backstop, but with this
-task the versions are namespaced by module identity from the start.
+Migration *versions* don't need any special handling from you —
+`SapoCore.Release` namespaces every module's migration versions by
+module id at boot before running them, so two modules can never collide
+on version even if they picked the same timestamp. See
+`SapoCore.Release.migration_paths/0` for how.
 
 ### PubSub — `SapoKit.PubSub`
 `subscribe/1`, `broadcast/2` on core's PubSub. Broadcast on state changes —
