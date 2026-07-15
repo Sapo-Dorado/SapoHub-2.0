@@ -50,3 +50,17 @@ Copy `examples/user-config/sapohub-prefs.nix` alongside your own
 Deploy button (or `sapohub-deploy --sync-prefs`) writes UI preferences
 into, and it needs to exist (even empty) before the first
 `nixos-rebuild switch`.
+
+Before running `nixos-rebuild switch`, create the secrets file on the
+target machine (the bootstrap script does this automatically for the
+fresh-machine path, but for an existing box you do it once by hand):
+
+```sh
+sudo mkdir -p /etc/sapohub
+sudo sh -c 'echo "SECRET_KEY_BASE=$(openssl rand -hex 64)" > /etc/sapohub/secrets.env'
+sudo chmod 600 /etc/sapohub/secrets.env
+```
+
+The service will not start correctly without `SECRET_KEY_BASE`. Any
+other secrets (e.g. `GITHUB_TOKEN`) can be added to the same file later
+via `sapohub-set-secret` or the Settings UI.
