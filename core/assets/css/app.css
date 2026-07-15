@@ -127,4 +127,24 @@ html, body {
   background-color: #0D1113;
 }
 
+/* Root-cause fix for native <input type="date">/<input type="time">
+   rendering wider than their declared width next to sibling text inputs
+   (my_plate's add-task form, reminders' date+time row). Chrome/Safari
+   build these controls from an internal shadow-DOM tree (the mm/dd/yyyy
+   or hh/mm segments + calendar icon), and that shadow tree carries its
+   OWN UA min-width, entirely separate from the box the `<input>` element
+   itself occupies — `width`/`min-width` set on the input (what
+   my_plate/reminders already do) never reaches it, so the control keeps
+   its default footprint regardless of the CSS box author code declares.
+   Zeroing the shadow parts' min-width directly is the only way to let
+   it actually shrink to its real content minimum. Firefox doesn't build
+   these controls from shadow DOM, so these selectors are simply inert
+   there — no separate handling needed. */
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit-fields-wrapper {
+  min-width: 0;
+}
+
 /* This file is for your main application CSS */

@@ -437,14 +437,19 @@ defmodule MyPlateWeb.Live.Index do
               layout with its own minimum content width, which some
               browsers will render past an author-specified `width` rather
               than shrink — even though the box itself is `border-box`.
-              `min-w-0` lets it actually honor `w-full` inside this flex/
-              block ancestor instead of falling back to the UA's implicit
-              `min-width: auto`, and `overflow-hidden` on the modal card
-              (above) is the backstop: if a browser still insists on
-              rendering the control wider than its box, it gets clipped at
-              the card's own rounded border instead of visually spilling
-              past it. The native calendar *popup* itself is unaffected —
-              it's painted by the browser's UI layer, not page layout.
+              The actual fix lives in app.css (Chrome/Safari build this
+              control from an internal shadow-DOM tree with its own UA
+              min-width — `min-w-0` here on the input's own box can't
+              reach that; the app.css rule zeroes the shadow parts'
+              min-width directly). `min-w-0` here is still worth keeping:
+              it's what lets this input's box actually honor `w-full`
+              rather than fall back to the UA's implicit `min-width: auto`.
+              `overflow-hidden` on the modal card (above) stays too, as a
+              backstop for any browser/locale combination the app.css rule
+              doesn't cover — clips at the card's rounded border instead of
+              spilling past it. The native calendar *popup* itself is
+              unaffected either way — it's painted by the browser's UI
+              layer, not page layout.
             -->
             <input
               type="date"

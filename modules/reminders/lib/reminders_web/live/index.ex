@@ -218,6 +218,11 @@ defmodule RemindersWeb.Live.Index do
                 class="w-full px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] placeholder-[#86948F] focus:border-[#7FB069] focus:outline-none"
               />
             </div>
+            <!-- Native date/time inputs sizing to their internal shadow-DOM
+                 minimum instead of this grid track (Chrome/Safari) is
+                 fixed globally in app.css, not per call site — see the
+                 comment there and on my_plate's index.ex, the other place
+                 this bug showed up. -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="min-w-0">
                 <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">date</label>
