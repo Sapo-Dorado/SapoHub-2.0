@@ -164,10 +164,14 @@ The script always asks you to re-type the target IP as a last
 confirmation before running nixos-anywhere — it's destructive (it
 partitions the disk), and there's no undo.
 
-**After bootstrap**: it clones this repo's own `origin` remote onto the
-target at `/etc/sapohub-config` (what `services.sapohub.deploy.flakePath`
-points at), so future updates work immediately — `ssh <ip>`, then
-`sapohub-deploy`, or the Settings page's Deploy button.
+**After bootstrap**: the target seeds its own `/etc/sapohub-config` checkout
+(what `services.sapohub.deploy.flakePath` points at) during that very first
+activation — `services.sapohub.deploy.repoUrl` (wired up automatically by
+`mkFreshMachine`'s `configRepoUrl` argument) tells the box which repo to
+clone; see `nix/nixos-module.nix`'s `sapohub-config-clone` service. So
+future updates work immediately — `ssh <ip>`, then `sapohub-deploy`, or the
+Settings page's Deploy button. bootstrap.sh just double-checks it landed
+before printing its summary.
 
 ### Existing NixOS box
 

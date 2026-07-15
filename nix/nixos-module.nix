@@ -174,6 +174,20 @@ in
           whatever that config already calls itself). Always set explicitly.
         '';
       };
+      repoUrl = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Git URL to clone into `deploy.flakePath` if nothing is checked out
+          there yet (idempotent — a no-op once it exists). This is what
+          makes `sapohub-deploy`/the Settings "Deploy" button work on the
+          very first run, on EITHER deployment path: mkFreshMachine wires
+          this through automatically, and an existing-box config can set it
+          directly. Leave null if you're seeding `deploy.flakePath` some
+          other way (e.g. it's already part of a checkout you manage by
+          hand) — nothing here will touch it.
+        '';
+      };
     };
 
     tailscale = {
@@ -287,6 +301,32 @@ in
           }
         ];
       }];
+
+      # Seeds deploy.flakePath from deploy.repoUrl on first boot, so
+      # sapohub-deploy (a bare `git -C flakePath pull`, no clone fallback of
+      # its own) has something to pull from immediately — on EITHER
+      # deployment path, not just the nixos-anywhere one. Previously only
+      # the fresh-machine bootstrap script did this, over SSH, after the
+      # fact; a box brought up any other way (existing-config import, or a
+      # manual `nixos-rebuild switch` from someone's own checkout) never
+      # got it, and `sapohub-deploy`/the Settings Deploy button would fail
+      # outright on its very first run with no clue why. Idempotent: only
+      # acts when flakePath isn't already a git checkout, so it's a no-op
+      # after the first successful run (or if you're managing that checkout
+      # yourself and repoUrl is left null).
+      systemd.services.sapohub-config-clone = mkIf (cfg.deploy.repoUrl != null) {
+        description = "Seed the SapoHub deploy config checkout if missing";
+        wantedBy = [ "multi-user.target" ];
+        path = [ pkgs.git ];
+        serviceConfig.Type = "oneshot";
+        script = ''
+          if [ -d "${cfg.deploy.flakePath}/.git" ]; then
+            exit 0
+          fi
+          mkdir -p "$(dirname "${cfg.deploy.flakePath}")"
+          git clone "${cfg.deploy.repoUrl}" "${cfg.deploy.flakePath}"
+        '';
+      };
 
       environment.systemPackages = [ cfg.cliPackage deployScript setSecretScript ] ++ cfg.hostPackages;
 

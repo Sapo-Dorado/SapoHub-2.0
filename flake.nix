@@ -87,6 +87,13 @@
         , secretsFile ? "/etc/sapohub/secrets.env"
         , tailscaleAuthKeyFile ? "/etc/sapohub/tailscale-authkey"
         , deployFlakePath ? "/etc/sapohub-config"
+          # HTTPS git URL of THIS config repo (the one calling mkFreshMachine)
+          # — wired straight into services.sapohub.deploy.repoUrl, so the
+          # target seeds its own checkout at deployFlakePath on first boot
+          # (see nix/nixos-module.nix's sapohub-config-clone). Leave null to
+          # skip that (e.g. a private repo the target has no credentials
+          # for) and seed deployFlakePath by hand instead, same as before.
+        , configRepoUrl ? null
           # Extra NixOS modules appended after everything below — e.g. a
           # ./sapohub-prefs.nix import, or per-host overrides. NOT to be
           # confused with `modules` above (the SapoHub *utility* modules
@@ -169,6 +176,7 @@
                   deploy = {
                     flakePath = deployFlakePath;
                     flakeAttr = hostname;
+                    repoUrl = configRepoUrl;
                   };
                 };
 
@@ -251,6 +259,7 @@
         hostname = "fresh-machine";
         hardwareDir = ./hardware;
         sshKey = "ssh-ed25519 AAAA..."; # CHANGE ME — your SSH public key
+        configRepoUrl = "https://github.com/YOUR/config-repo"; # CHANGE ME — HTTPS URL of THIS flake's own repo, so the target can seed /etc/sapohub-config on first boot
         modules = [ self.sapohubModules.hello self.sapohubModules.my_plate self.sapohubModules.reminders self.sapohubModules.projects ];
         depsHash = "sha256-xNO7J5/zhUsQF2Wu1uhuemj0GnjXc77fG4i4pADTx9w=";
         npmDepsHash = "sha256-iHOJ/cXZOsPeEnKaDBYbEj7ClLpJ5hbmrZwnLmTvrdU=";

@@ -80,6 +80,12 @@
             # /etc/sapohub/secrets.env and /etc/sapohub-config — only
             # override if yours actually live somewhere else.
             deploy.flakeAttr = "your-host"; # YOUR nixosConfigurations attr name, not "hub"
+            # Optional: set this to this repo's own HTTPS URL and the box
+            # seeds /etc/sapohub-config itself on first boot — no manual
+            # `git clone` needed before your first `sapohub-deploy`/Deploy
+            # button press. Leave unset if you're managing that checkout
+            # some other way already.
+            # deploy.repoUrl = "https://github.com/you/your-config-repo";
             # assistant.browser.enable = true;
             inherit prefs; # plain assignment — wins over sapohub-prefs.nix's mkDefault-wrapped values
           };
