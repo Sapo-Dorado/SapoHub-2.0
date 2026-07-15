@@ -406,7 +406,16 @@ in
           # reachable at all from inside the same tailnet already (see
           # nginx.enable's loopback-only BIND_IP above), so any peer that
           # could spoof that Origin header already has network access.
-          CHECK_ORIGIN = optionalString cfg.tailscale.enable "//*.ts.net";
+          # Also always allow bare "localhost" origins (any scheme/port —
+          # Phoenix's list-mode check_origin treats missing components as
+          # wildcards) alongside the tailnet pattern rather than instead
+          # of it: anything hitting the app's own port directly on this
+          # box — assistant.browser.enable's Chrome (always
+          # http://localhost:${port}), curl, etc — sends Origin
+          # http://localhost:${port}, which the *.ts.net-only list used to
+          # reject outright even though check_origin defaults to allowing
+          # exactly this when tailscale.enable is off.
+          CHECK_ORIGIN = optionalString cfg.tailscale.enable "//*.ts.net,//localhost";
           DATABASE_PATH = "${cfg.stateDir}/db/sapohub.db";
           STORAGE_ROOT = storageRoot;
           SNAPSHOTS_DIR = "${cfg.stateDir}/snapshots";
