@@ -121,6 +121,30 @@ defmodule ProjectsTest do
     assert File.exists?(Disk.source_path(project.name) <> "/note.txt")
   end
 
+  test "push_project lands local commits even with unrelated uncommitted changes present" do
+    remote = bare_remote!()
+    {:ok, project} = Projects.create_and_setup(%{"name" => "pushme", "github_url" => remote})
+    source = Disk.source_path(project.name)
+
+    File.write!(Path.join(source, "committed.txt"), "landed\n")
+    {_, 0} = System.cmd("git", ["add", "committed.txt"], cd: source)
+    {_, 0} = System.cmd("git", ["commit", "-m", "add committed file"], cd: source)
+
+    # Work-in-progress left in the tree — pull_project (a fetch+merge, which
+    # needs a clean tree to be safe) refuses to run at all with this present.
+    File.write!(Path.join(source, "wip.txt"), "not committed")
+    assert {:error, reason} = Projects.pull_project(project)
+    assert reason =~ "uncommitted"
+
+    # push_project doesn't care — it never touches the working tree.
+    assert {:ok, _output} = Projects.push_project(project)
+
+    verify_clone = Path.join(System.tmp_dir!(), "sapo_projects_verify_#{System.unique_integer([:positive])}")
+    {_, 0} = System.cmd("git", ["clone", remote, verify_clone])
+    assert File.exists?(Path.join(verify_clone, "committed.txt"))
+    File.rm_rf!(verify_clone)
+  end
+
   test "delete_project_safely blocks on uncommitted changes, then succeeds once clean" do
     remote = bare_remote!()
     {:ok, project} = Projects.create_and_setup(%{"name" => "dirty", "github_url" => remote})

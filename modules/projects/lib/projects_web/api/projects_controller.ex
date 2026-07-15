@@ -38,6 +38,37 @@ defmodule ProjectsWeb.Api.ProjectsController do
     Ecto.NoResultsError -> render_not_found(conn)
   end
 
+  # Named "sync" here (not "pull", despite calling Projects.pull_project/1)
+  # because that's what it actually does — fetch, push anything local
+  # that's ahead, then merge anything remote that's behind. Requires a
+  # clean working tree first (see Git.check_clean/1); a caller with
+  # uncommitted work-in-progress should use `push` below instead.
+  def sync(conn, %{"id" => id}) do
+    project = Projects.get_project!(id)
+
+    case Projects.pull_project(project) do
+      {:ok, updated} -> json(conn, serialize(updated))
+      {:error, reason} -> conn |> put_status(:unprocessable_entity) |> json(%{error: reason})
+    end
+  rescue
+    Ecto.NoResultsError -> render_not_found(conn)
+  end
+
+  # Push-only: no clean-tree requirement, doesn't touch the working tree or
+  # merge anything remote — just lands whatever's already committed
+  # locally. See Git.push/1 for why this needs to exist separately from
+  # `sync` above.
+  def push(conn, %{"id" => id}) do
+    project = Projects.get_project!(id)
+
+    case Projects.push_project(project) do
+      {:ok, output} -> json(conn, %{output: output})
+      {:error, reason} -> conn |> put_status(:unprocessable_entity) |> json(%{error: reason})
+    end
+  rescue
+    Ecto.NoResultsError -> render_not_found(conn)
+  end
+
   defp serialize(project) do
     %{
       id: project.id,

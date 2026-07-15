@@ -230,13 +230,11 @@ let
 
     git -C "$FLAKE_PATH" add sapohub-prefs.nix
     if ! git -C "$FLAKE_PATH" diff --cached --quiet; then
-      # This runs as root via sudo, whose git identity is never
-      # otherwise configured on a fresh machine — `git commit` would
-      # abort with "Please tell me who you are" before ever reaching
-      # the rebuild. Pass an explicit identity so this automated
-      # commit never depends on host git config existing.
-      git -c user.name="sapohub-deploy" -c user.email="sapohub-deploy@localhost" \
-        -C "$FLAKE_PATH" commit -m "sapohub: sync UI preferences"
+      # Identity comes from ambient /etc/gitconfig (services.sapohub.
+      # gitIdentity, written by nix/nixos-module.nix) — that's a
+      # system-wide file, so it applies here whether this runs as root
+      # via sudo or any other way, with no per-command override needed.
+      git -C "$FLAKE_PATH" commit -m "sapohub: sync UI preferences"
 
       if [ -n "$GITHUB_TOKEN" ]; then
         # Push over an authenticated URL built just for this one push —

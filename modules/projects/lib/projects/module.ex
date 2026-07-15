@@ -47,6 +47,8 @@ defmodule Projects.Module do
       %{verb: :post, path: "/projects", controller: ProjectsWeb.Api.ProjectsController, action: :create},
       %{verb: :get, path: "/projects/:id", controller: ProjectsWeb.Api.ProjectsController, action: :show},
       %{verb: :delete, path: "/projects/:id", controller: ProjectsWeb.Api.ProjectsController, action: :delete},
+      %{verb: :post, path: "/projects/:id/sync", controller: ProjectsWeb.Api.ProjectsController, action: :sync},
+      %{verb: :post, path: "/projects/:id/push", controller: ProjectsWeb.Api.ProjectsController, action: :push},
       %{verb: :get, path: "/projects/:id/scripts", controller: ProjectsWeb.Api.ScriptsController, action: :index},
       %{verb: :post, path: "/projects/:id/scripts/run", controller: ProjectsWeb.Api.ScriptsController, action: :run},
       %{verb: :get, path: "/projects/:id/params", controller: ProjectsWeb.Api.ParamsController, action: :index},
@@ -88,6 +90,15 @@ defmodule Projects.Module do
     endpoints. NOTE: scripts with `SAPO_SCRIPT_SUDO: true` are listed but
     CANNOT be run via the API, CLI, or UI in this version — do not attempt
     to work around this by running them directly in the shell either.
+
+    To land a commit made in a project's `source/` checkout (e.g. an
+    assistant session editing that project's own code): `sapo projects push
+    <id>` pushes whatever's already committed and ignores any other
+    uncommitted changes sitting in the tree — no need to stash/finish
+    unrelated work-in-progress first. `sapo projects sync <id>` is the
+    fuller fetch+push+merge behind the "Pull" button instead — it
+    additionally pulls down remote changes, but requires a fully clean
+    working tree (fails if anything is uncommitted, staged or not).
     """
   end
 

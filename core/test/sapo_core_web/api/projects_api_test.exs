@@ -68,6 +68,30 @@ defmodule SapoCoreWeb.Api.ProjectsApiTest do
     assert reason =~ "uncommitted"
   end
 
+  test "push pushes a local commit even with unrelated uncommitted changes present", %{conn: conn} do
+    remote = bare_remote!()
+    conn1 = post(conn, ~p"/api/projects", %{"name" => "push-api", "github_url" => remote})
+    %{"id" => id} = json_response(conn1, 201)
+    source = Projects.Disk.source_path("push-api")
+
+    File.write!(Path.join(source, "committed.txt"), "landed\n")
+    {_, 0} = System.cmd("git", ["add", "committed.txt"], cd: source)
+    {_, 0} = System.cmd("git", ["commit", "-m", "add committed file"], cd: source)
+    File.write!(Path.join(source, "wip.txt"), "not committed")
+
+    conn2 = post(conn, ~p"/api/projects/#{id}/sync")
+    assert %{"error" => reason} = json_response(conn2, 422)
+    assert reason =~ "uncommitted"
+
+    conn3 = post(conn, ~p"/api/projects/#{id}/push")
+    assert %{"output" => _} = json_response(conn3, 200)
+
+    verify_clone = Path.join(System.tmp_dir!(), "sapo_projects_api_verify_#{System.unique_integer([:positive])}")
+    {_, 0} = System.cmd("git", ["clone", remote, verify_clone])
+    assert File.exists?(Path.join(verify_clone, "committed.txt"))
+    File.rm_rf!(verify_clone)
+  end
+
   test "params API", %{conn: conn} do
     {:ok, project} = Projects.create_project(%{"name" => "param-proj", "github_url" => "x"})
 

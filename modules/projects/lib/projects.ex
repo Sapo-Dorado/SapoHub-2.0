@@ -93,6 +93,13 @@ defmodule Projects do
   end
 
   @doc """
+  Pushes local commits ahead of the remote (see `Git.push/1` — no clean-tree
+  requirement, unlike `pull_project/1`). Returns `{:ok, output}` or
+  `{:error, reason}`.
+  """
+  def push_project(%Project{} = project), do: Git.push(project.name)
+
+  @doc """
   Deletes a project's DB row and its on-disk directory, after confirming it's
   safe to do so (no uncommitted changes / unpushed commits). Returns `:ok` or
   `{:error, reason}`.

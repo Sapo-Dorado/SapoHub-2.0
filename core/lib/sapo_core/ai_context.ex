@@ -74,6 +74,15 @@ defmodule SapoCore.AiContext do
       config repo.
     - Before committing, run `git fetch origin` then
       `git log HEAD..origin/main --oneline` — rebase first if it returns commits.
+    - Ambient git identity (system-wide /etc/gitconfig, services.sapohub.
+      gitIdentity) is already set up — plain `git commit` works with no
+      identity flags needed. To push a commit in a Projects-module checkout
+      (e.g. this repo itself), use `sapo projects push <id>` — it pushes
+      whatever's committed without touching the working tree, unlike
+      `sapo projects sync <id>` (fetch+push+merge) which requires a fully
+      clean tree first. GITHUB_TOKEN itself is root-only and never readable
+      here — these operations authenticate inside the app process, not via
+      any credential this session has direct access to.
     - Files written under a module's storage directory appear in the
       storage API and in snapshots automatically — no manual registration needed.
     """

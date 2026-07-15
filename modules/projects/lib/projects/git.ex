@@ -14,12 +14,14 @@ defmodule Projects.Git do
   `git remote -v` output. Optional — with no token set, public HTTPS
   clone/pull/commit still work exactly as before; only pushes and private
   clones need it, same degrade-gracefully behavior as the deploy path.
-  There is still no git commit identity wired in beyond whatever ambient
-  `user.name`/`user.email` the host has (or none, which only matters if
-  this module ever needs to author a commit itself, not just push existing
-  ones — `initialize_if_empty/1`'s README commit is the one exception, and
-  reuses `sapohub-projects`/`sapohub-projects@localhost` like
-  `deploy-script.nix` does for its own automated commit).
+  Commit identity (needed by `initialize_if_empty/1`'s README commit, or
+  by anything else run in this checkout that authors a commit — a human
+  or assistant session at the shell, say) comes from the ambient
+  `/etc/gitconfig` the NixOS module writes from
+  `services.sapohub.gitIdentity` — see `nix/nixos-module.nix`. Nothing
+  here overrides it with its own `-c user.name=...`/`-c user.email=...`
+  anymore; that would just be a second, easy-to-drift place naming the
+  same identity.
   """
 
   alias Projects.Disk
@@ -52,16 +54,7 @@ defmodule Projects.Git do
 
         with :ok <- File.write(readme_path, "# #{name}\n"),
              {:ok, _} <- run_git(source, ["add", "README.md"]),
-             {:ok, _} <-
-               run_git(source, [
-                 "-c",
-                 "user.name=sapohub-projects",
-                 "-c",
-                 "user.email=sapohub-projects@localhost",
-                 "commit",
-                 "-m",
-                 "Initial commit"
-               ]),
+             {:ok, _} <- run_git(source, ["commit", "-m", "Initial commit"]),
              {:ok, _} <- push(source, ["-u", "origin", "HEAD"]) do
           {:ok, :initialized}
         end
@@ -84,6 +77,21 @@ defmodule Projects.Git do
       Disk.sync_guide()
       {:ok, output}
     end
+  end
+
+  @doc """
+  Pushes any local commits ahead of the remote. Unlike `pull/1`, this never
+  touches the working tree, so it does NOT require (or even check) a clean
+  working directory first — uncommitted local changes are simply left
+  alone. This is what lets an assistant session with work-in-progress
+  still land already-committed commits without being forced to stash or
+  finish that work first (the "Pull" button's full `pull/1` flow is a
+  fetch+merge too, which DOES need a clean tree to be safe). Returns
+  `{:ok, output}` or `{:error, reason}`.
+  """
+  def push(name) do
+    source = Disk.source_path(name)
+    push(source, [])
   end
 
   @doc """

@@ -101,6 +101,29 @@ in
 
     stateDir = mkOption { type = types.str; default = "/var/lib/sapohub"; };
 
+    gitIdentity = {
+      name = mkOption {
+        type = types.str;
+        default = "sapohub";
+        description = ''
+          Written to a system-wide /etc/gitconfig, so any git commit
+          authored on this box — by sapohub-deploy's own prefs-sync
+          commit, by the Projects module, or by a human/assistant session
+          working directly in a checkout under this box's account — has
+          somewhere to get an identity from without hitting git's "Please
+          tell me who you are" and without each of those call sites having
+          to hardcode (and keep in sync) their own -c user.name/user.email
+          override. Anything that wants a MORE specific identity than this
+          (e.g. a distinct bot name per subsystem) is still free to pass
+          its own -c flags, which always win over this ambient default.
+        '';
+      };
+      email = mkOption {
+        type = types.str;
+        default = "sapohub@localhost";
+      };
+    };
+
     storageRoot = mkOption {
       type = types.nullOr types.str;
       default = null;
@@ -332,6 +355,22 @@ in
 
       # Nix-declared prefs base; the app overlays local UI edits on top.
       environment.etc."sapohub/prefs.json".text = builtins.toJSON cfg.prefs;
+
+      # System-wide default git identity (see gitIdentity's description) —
+      # /etc/gitconfig is consulted by git for every user on the box unless
+      # a more specific user- or repo-level config overrides it, so this is
+      # one write that covers root (sapohub-deploy's own commit), the
+      # sapohub user (Projects module, assistant/human sessions), and
+      # anyone else. mkDefault: an existing-box config may already manage
+      # /etc/gitconfig itself (or a user-level ~/.gitconfig, which git
+      # already prefers over this system-wide file regardless) — this
+      # should never hard-conflict with config that's already someone
+      # else's, just fill the gap when nothing else claims it.
+      environment.etc."gitconfig".text = lib.mkDefault ''
+        [user]
+          name = ${cfg.gitIdentity.name}
+          email = ${cfg.gitIdentity.email}
+      '';
 
       systemd.services.sapohub = {
         description = "SapoHub 2.0";
