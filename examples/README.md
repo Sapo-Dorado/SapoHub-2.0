@@ -51,6 +51,21 @@ Deploy button (or `sapohub-deploy --sync-prefs`) writes UI preferences
 into, and it needs to exist (even empty) before the first
 `nixos-rebuild switch`.
 
+The recommended networking options for an existing box are Tailscale +
+HTTPS nginx — add them alongside `deploy.flakeAttr`:
+
+```nix
+{ services.sapohub.deploy.flakeAttr = "<your-host>";
+  services.sapohub.tailscale.enable = true;
+  services.sapohub.nginx.https = true; }
+```
+
+`tailscale.enable` installs and starts tailscaled (you still need to run
+`tailscale up` once to authenticate if you don't supply an auth key).
+`nginx.https = true` enables the nginx reverse proxy on port 443 with
+Tailscale-issued TLS certificates — without it nginx only listens on
+port 80 and the firewall stays closed.
+
 Before running `nixos-rebuild switch`, create the secrets file on the
 target machine (the bootstrap script does this automatically for the
 fresh-machine path, but for an existing box you do it once by hand):
