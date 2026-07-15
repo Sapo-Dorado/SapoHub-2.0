@@ -256,6 +256,83 @@ As of this writing, the pieces worth knowing:
   a persistent Xvfb + Chrome pair for assistant sessions/skills that need
   a real browser (heavier; only enable if actually needed).
 
+## Pairing Claude in Chrome with the assistant browser
+
+`assistant.browser.enable` gives an agent session a persistent Chrome
+(`chrome-sapohub` service, Xvfb on display `:99`, profile under
+`${stateDir}/.config/google-chrome`) — but that only provisions the
+browser. The `mcp__claude-in-chrome__*` tools still need the "Claude for
+Chrome" extension installed and signed in inside that specific profile
+before `list_connected_browsers` will ever show it, and that's an
+interactive, one-time step no nix option automates (neither does
+SapoHub-1, which used the exact same Xvfb+Chrome recipe and needed the
+same manual pairing). This whole section only applies when
+`services.sapohub.assistant.browser.enable = true;` for the install in
+question — check the actual config for that host before bringing any
+of this up (grep its `services.sapohub` block, or on a running box
+`pgrep -af "Xvfb :99"`/`pgrep -af chrome`, owned by the `sapohub` user,
+as a live proxy for the same thing). If it's off, either skip this
+section entirely or, if the user wants browser access, set the option
+and redeploy first — don't start a VNC session against a Chrome that
+was never provisioned. Once confirmed on, do the pairing via a
+throwaway VNC session onto display `:99`, approved by the human:
+
+1. Fetch a VNC server on demand (nothing this heavy belongs in the
+   system closure permanently): `nix-shell -p x11vnc --run "x11vnc ..."`.
+2. Generate a random password rather than a fixed/predictable one and
+   store it via x11vnc's own hashed format, not plaintext on the
+   command line:
+   ```
+   mkdir -p /var/lib/sapohub/.vnc
+   PASS=$(head -c 12 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)
+   nix-shell -p x11vnc --run "x11vnc -storepasswd '$PASS' /var/lib/sapohub/.vnc/passwd"
+   chmod 600 /var/lib/sapohub/.vnc/passwd
+   ```
+   Show `$PASS` to the user once; it doesn't need to be remembered
+   after this session.
+3. Start it attached to `:99` specifically — never `:0` (the human's
+   own desktop session, a completely different display/socket, e.g.
+   `/tmp/.X11-unix/X0` vs `X99` — check `ls /tmp/.X11-unix/` and
+   `loginctl list-sessions` if there's ever doubt which is which):
+   ```
+   nohup nix-shell -p x11vnc --run \
+     "x11vnc -display :99 -rfbauth /var/lib/sapohub/.vnc/passwd -forever -shared -rfbport 5999 <bind-flag>" \
+     > /var/lib/sapohub/.vnc/x11vnc.log 2>&1 &
+   disown
+   ```
+   `<bind-flag>` depends on how the user will reach it — ask, don't
+   assume:
+   - Has an SSH client available (laptop/desktop): `-localhost`, then
+     they run `ssh -L 5999:localhost:5999 <their-user>@<tailscale-ip>`
+     and point a VNC client at `localhost:5999`. Safer default — the
+     port never listens on any real interface.
+   - Phone-only / no SSH client: `-listen <tailscale-ip>` (from
+     `tailscale ip`) so the VNC client can connect directly to
+     `<tailscale-ip>:5999`, no tunnel needed. Confirm this tradeoff
+     with the user first — it's still password-protected, but now
+     reachable from anywhere on their tailnet rather than only via an
+     authenticated SSH session. **Never bind `0.0.0.0`/all-interfaces**
+     — this box may not have `nginx.enable`'s loopback restriction
+     protecting arbitrary ports.
+   Whichever SSH user they tunnel through is irrelevant to *what* gets
+   shown — that's determined entirely by `-display :99`, not by which
+   Linux account authenticated the tunnel. (The `sapohub` service user
+   itself typically has shell `nologin` and can't be SSH'd into
+   directly — that's expected, not a problem to solve.)
+4. Tell the user to connect, install "Claude for Chrome" from the
+   Chrome Web Store inside that VNC session, sign in, and confirm any
+   pairing prompt. No separate approval step was needed beyond that in
+   practice — the extension just shows up in `list_connected_browsers`
+   once signed in.
+5. Back in the agent session: `list_connected_browsers` →
+   `select_browser` with the returned `deviceId`. From then on the
+   normal `mcp__claude-in-chrome__*` tools (navigate, computer, find,
+   read_console_messages, ...) drive this exact browser.
+6. Tear down x11vnc when done pairing (`pkill -f "x11vnc -display :99"`)
+   — it's a throwaway setup aid, not something that needs to stay
+   running. The paired extension and Chrome profile persist across
+   `chrome-sapohub` restarts either way.
+
 ## Redeploying an already-running box
 
 `sapohub-deploy` is installed on the target (via `environment.systemPackages`
