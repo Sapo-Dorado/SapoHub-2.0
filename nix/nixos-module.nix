@@ -104,7 +104,7 @@ in
     gitIdentity = {
       name = mkOption {
         type = types.str;
-        default = "sapohub";
+        default = "Nicholas Brown";
         description = ''
           Written to a system-wide /etc/gitconfig, so any git commit
           authored on this box — by sapohub-deploy's own prefs-sync
@@ -116,11 +116,13 @@ in
           override. Anything that wants a MORE specific identity than this
           (e.g. a distinct bot name per subsystem) is still free to pass
           its own -c flags, which always win over this ambient default.
+          The default here is this deployment's own owner — override it if
+          you're reusing this module for a different person's box.
         '';
       };
       email = mkOption {
         type = types.str;
-        default = "sapohub@localhost";
+        default = "sapodorado@proton.me";
       };
     };
 
