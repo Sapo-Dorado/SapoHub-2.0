@@ -42,12 +42,6 @@
             lib = nixpkgs.lib;
             elixir = beamPkgs.elixir_1_18;
           };
-        in {
-          package = compose {
-            src = self;
-            inherit modules depsHash npmDepsHash;
-          };
-          cli = mkCli { src = self; inherit modules apiBase; };
           # Each module MAY declare `hostPackages = pkgs: [ ... ];` — a
           # function (not a plain list) so a module never needs its own
           # nixpkgs input just to reach `pkgs.yt-dlp`. This is handed
@@ -59,6 +53,22 @@
           # whatever's newest, not whatever's warm in the local store.
           # Modules that don't need any host binary just omit the field.
           hostPackages = nixpkgs.lib.concatMap (m: (m.hostPackages or (_: [ ])) toolsPkgs) modules;
+        in {
+          # hostPackages is attached as a passthru so nixos-module.nix's
+          # `services.sapohub.hostPackages` option can default itself off
+          # `cfg.package` alone — a config that sets `package = built.
+          # package;` gets its modules' host binaries on PATH for free,
+          # with no separate `hostPackages = built.hostPackages;` line to
+          # remember (and to silently drop when a config gets hand-edited
+          # — see the yt-dlp-not-on-PATH bug this fixed).
+          package = (compose {
+            src = self;
+            inherit modules depsHash npmDepsHash;
+          }).overrideAttrs (old: {
+            passthru = (old.passthru or { }) // { inherit hostPackages; };
+          });
+          cli = mkCli { src = self; inherit modules apiBase; };
+          inherit hostPackages;
         };
 
       # ── Fresh-machine (nixos-anywhere) host builder ─────────────────────────
@@ -165,7 +175,8 @@
                   enable = true;
                   package = built.package;
                   cliPackage = built.cli;
-                  hostPackages = built.hostPackages;
+                  # hostPackages defaults itself off cfg.package's passthru
+                  # (see lib.mkSapoHub in this file) — no manual wiring here.
                   inherit secretsFile;
                   assistant.claudePackage = flakePkgs.claude-code;
                   tailscale = {
@@ -311,7 +322,7 @@
                 enable = true;
                 package = built.package;
                 cliPackage = built.cli;
-                hostPackages = built.hostPackages;
+                # hostPackages defaults itself off cfg.package's passthru.
                 host = "localhost";
                 port = 4000;
                 secretsFile = "/etc/sapohub-secrets.env";

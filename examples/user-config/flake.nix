@@ -73,7 +73,10 @@
             enable = true;
             package = hub.package;
             cliPackage = hub.cli;
-            hostPackages = hub.hostPackages; # host binaries your modules declared (yt-dlp, etc.)
+            # hostPackages (yt-dlp, etc. from your modules) is picked up
+            # automatically off hub.package's passthru — no line needed
+            # here. Only set it explicitly if you want to add/replace a
+            # binary without rebuilding package.
             host = "my-host.example";
             port = 4000;
             # secretsFile and deploy.flakePath already default to

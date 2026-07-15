@@ -66,15 +66,20 @@ in
 
     hostPackages = mkOption {
       type = types.listOf types.package;
-      default = [ ];
+      default = cfg.package.hostPackages or [ ];
       description = ''
         Extra host binaries required by enabled util modules (e.g. yt-dlp,
-        print-proxy-prep) — the `hostPackages` output of lib.mkSapoHub,
-        already resolved from each module's own `hostPackages` descriptor
-        field against this build's own `pkgs`. Folded into both
-        environment.systemPackages and the sapohub.service PATH, so a
-        module that declares one of these never needs the CONFIG REPO to
-        separately remember to install it.
+        print-proxy-prep) — resolved from each module's own `hostPackages`
+        descriptor field against this build's own `pkgs` and baked onto
+        `cfg.package` as a passthru by lib.mkSapoHub, so this defaults
+        itself off whatever `services.sapohub.package` is set to. Folded
+        into both environment.systemPackages and the sapohub.service PATH,
+        so a module that declares one of these never needs the CONFIG REPO
+        to separately remember to install it — setting `package =
+        built.package;` is enough. Only set this explicitly if you need to
+        add/replace binaries without rebuilding `package` (e.g. a quick
+        manual override) or if `package` wasn't built via lib.mkSapoHub at
+        all and so carries no such passthru.
       '';
     };
 
