@@ -177,26 +177,26 @@ before printing its summary.
 
 Already manage a NixOS config? Write one flake (see
 `examples/user-config/flake.nix`): pick modules, splice in
-`services.sapohub`, `nixos-rebuild switch`. After that,
-deploy from the Settings page — it pulls your config repo from GitHub,
-syncs UI preferences back into it (`sapohub-prefs.nix`), and rebuilds,
-streaming output into the UI.
+`services.sapohub`, `nixos-rebuild switch`. Also copy the template's one-line
+conditional import of `.sapohub/sapohub-prefs.nix` into your own
+`nixosConfigurations.<host>`'s `modules` list — that's the file the Settings
+page's Deploy button syncs preferences into. Nix can't auto-detect it (an
+`imports` list has to resolve before any config value exists), so every
+config repo needs that one line itself. After that, deploy from the
+Settings page — it pulls your config repo from GitHub, syncs UI preferences
+back into it (`.sapohub/sapohub-prefs.nix`), and rebuilds, streaming output
+into the UI.
 
 **Git/nix is always the source of truth for a manual deploy.** The
 Settings button runs `sapohub-deploy --sync-prefs`, which is the only
 thing that ever writes local UI preference changes back into
-`sapohub-prefs.nix`. A bare `sudo sapohub-deploy` — over SSH, from cron,
+`.sapohub/sapohub-prefs.nix`. A bare `sudo sapohub-deploy` — over SSH, from cron,
 anywhere outside the UI — skips that sync and rebuilds from exactly
 what's committed, full stop; it will never let an uncommitted local
 preference change quietly override your config. Pending preference
 changes aren't lost either way — they still apply live at runtime
 (`SapoCore.Prefs` reads a local overlay first) and stay queued for the
 next `--sync-prefs` deploy.
-
-**Commit the empty `sapohub-prefs.nix` stub from the example and import it
-from day one** (the example does this already), so that once you DO sync
-preferences from Settings, they round-trip into your git-tracked config
-and survive a redeploy onto a new host.
 
 Snapshots: "Save all data" produces one tar.gz (SQLite backup + every
 module's storage + manifest). Restore by deploying with

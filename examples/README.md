@@ -38,18 +38,19 @@ yours.
 real, deployed instance built the same way — worth reading alongside
 this example, since it also shows the fresh-machine side (its own
 `nixosConfigurations.<host>` via `sapohub.lib.mkFreshMachine`) sharing
-the same `modules`/`prefs` bindings as its `nixosModules.default`.
+the same `modules` binding as its `nixosModules.default`.
 
 If you'd rather splice the pieces by hand instead of importing the
-module (e.g. to omit `sapohub-prefs.nix`, or reorder relative to other
-modules), `sapohubModulesForHost` is exposed too — it's the same list
-`nixosModules.default` imports.
+module (e.g. to reorder relative to other modules), `sapohubModulesForHost`
+is exposed too — it's the same list `nixosModules.default` imports.
 
-Copy `examples/user-config/sapohub-prefs.nix` alongside your own
-`flake.nix` too — it's a machine-owned file that the Settings page's
-Deploy button (or `sapohub-deploy --sync-prefs`) writes UI preferences
-into, and it needs to exist (even empty) before the first
-`nixos-rebuild switch`.
+UI preferences: the template's `prefsImport` — a conditional import of
+`.sapohub/sapohub-prefs.nix`, the file the Settings page's Deploy button
+syncs preferences into — is already wired into `sapohubModulesForHost`.
+Nix can't auto-detect this file for you (an `imports` list has to resolve
+before any config value exists), so keep that line if you fork this
+template into your own repo. No stub file needs to exist up front —
+`pathExists` just skips it until the first sync.
 
 The recommended networking options for an existing box are Tailscale +
 HTTPS nginx — add them alongside `deploy.flakeAttr`:

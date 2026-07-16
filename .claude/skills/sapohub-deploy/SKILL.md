@@ -115,8 +115,10 @@ the confirmation input; let the user actually see and confirm it.
 SapoHub-2.0's own `nixosConfigurations.fresh-machine` block, or (the
 normal case) the `hosts`/`mkHost` setup in a personal config repo like
 `sapohub-config`, which has one call per hostname and a place to pass
-`extraNixosModules` for anything `mkFreshMachine` doesn't take directly
-(e.g. a `sapohub-prefs.nix` import). Read `lib.mkFreshMachine`'s
+`extraNixosModules` for anything `mkFreshMachine` doesn't take directly —
+including the conditional `.sapohub/sapohub-prefs.nix` import (see
+`sapohub-config`'s own `flake.nix` for the `prefsImport` pattern). Read
+`lib.mkFreshMachine`'s
 definition in SapoHub-2.0's root `flake.nix` for the current parameter
 list rather than assuming it hasn't changed.
 
@@ -181,15 +183,21 @@ Concretely, this means:
    `examples/user-config/flake.nix`'s `inputs.sapohub.url`).
 3. Add `sapohub.lib.mkSapoHub { ... }` to compute the package/cli,
    choosing their module set.
-4. Append `sapohub.nixosModules.default`, a `./sapohub-prefs.nix` import
-   (copy the empty-stub file from `examples/user-config/sapohub-prefs.nix`
-   into their repo first — commit it before the first
-   `nixos-rebuild switch`, not after), and a `services.sapohub = {...}`
-   block into their EXISTING `nixosConfigurations.<host>`'s `modules`
-   list — don't create a new nixosConfigurations output. Only set values
-   the user actually needs to override; `secretsFile` and
-   `deploy.flakePath` already default sensibly and don't need restating.
-   `deploy.flakeAttr` still must be set explicitly (see above).
+4. Append `sapohub.nixosModules.default`, a conditional import of
+   `.sapohub/sapohub-prefs.nix` (copy the `prefsImport` pattern from
+   `examples/user-config/flake.nix` — `lib.optional (builtins.pathExists
+   ./.sapohub/sapohub-prefs.nix) ./.sapohub/sapohub-prefs.nix`), and a
+   `services.sapohub = {...}` block into their EXISTING
+   `nixosConfigurations.<host>`'s `modules` list — don't create a new
+   nixosConfigurations output. Only set values the user actually needs to
+   override; `secretsFile` and `deploy.flakePath` already default sensibly
+   and don't need restating. `deploy.flakeAttr` still must be set
+   explicitly (see above). The prefs import can't be skipped or inherited
+   from `sapohub.nixosModules.default` automatically — Nix's module system
+   can't auto-detect that file (imports must resolve before any config
+   value exists), so every top-level config repo needs this one line
+   itself. No stub file needs to exist up front; `pathExists` just skips
+   it until the first sync.
 5. They run `nixos-rebuild switch --flake .#<their-attr>` themselves
    (or however they normally deploy their own config) — this skill
    doesn't run destructive commands against a machine you don't know
@@ -219,7 +227,7 @@ As of this writing, the pieces worth knowing:
 - **Dashboard/UI preferences** (`services.sapohub.prefs`): dashboard
   tile order, button variants, statusline toggles. Normally NOT
   hand-edited — set live in the Settings UI, then synced to
-  `sapohub-prefs.nix` by the Settings page's Deploy button
+  `.sapohub/sapohub-prefs.nix` by the Settings page's Deploy button
   (`sapohub-deploy --sync-prefs`). A bare `sapohub-deploy` (SSH, cron,
   anywhere outside the UI) never does this sync, by design — git/nix
   stays authoritative unless the user explicitly deploys from the UI.
@@ -360,7 +368,6 @@ the file is ever read).
 - Don't run `scripts/bootstrap.sh` or any nixos-anywhere invocation
   without the user explicitly confirming the target IP and that
   destroying the target's current disk contents is intended.
-- Don't hand-write `sapohub-prefs.nix` content for a user — it's
+- Don't hand-write `.sapohub/sapohub-prefs.nix` content for a user — it's
   machine-owned and meant to be synced from the running app's Settings
-  page, not authored directly (the only exception is the initial empty
-  stub, which is fine to copy verbatim).
+  page, not authored directly.

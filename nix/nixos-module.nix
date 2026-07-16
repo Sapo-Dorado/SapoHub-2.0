@@ -166,10 +166,15 @@ in
         statusline toggles). Usually you don't write these by hand:
         Settings-page edits apply instantly via a local overlay, and a
         deploy run with `--sync-prefs` (the Settings "Deploy" button; see
-        nix/deploy-script.nix) renders them into sapohub-prefs.nix in your
-        config repo (lib.mkDefault, so anything set here directly wins).
-        A bare manual `sapohub-deploy` never does this sync — git/nix
-        stays authoritative for it.
+        nix/deploy-script.nix) renders them into `.sapohub/sapohub-prefs.nix`
+        at the root of `deploy.flakePath` (lib.mkDefault, so anything set
+        here directly wins). Your own config's `nixosConfigurations.<host>`
+        needs one line conditionally importing that file (see
+        examples/user-config/flake.nix) — Nix's module system can't auto-
+        detect it for you, since `imports` has to resolve before any
+        `config` value (including `deploy.flakePath`) exists. A bare manual
+        `sapohub-deploy` never does the sync — git/nix stays authoritative
+        for it.
       '';
     };
 

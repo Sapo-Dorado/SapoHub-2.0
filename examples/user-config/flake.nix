@@ -16,7 +16,7 @@
 #      import — that's yours already, and pasting a fake one over it
 #      would be actively wrong.
 #
-# `modules`/`depsHash`/`npmDepsHash`/`prefs` are each defined ONCE below
+# `modules`/`depsHash`/`npmDepsHash` are each defined ONCE below
 # and referenced everywhere they're needed — the template to copy for
 # your own config repo. See https://github.com/Sapo-Dorado/SapoHub-Config
 # for a real, deployed instance built the same way (it also has its own
@@ -35,6 +35,7 @@
   outputs = { self, sapohub, ... }@inputs:
     let
       system = "x86_64-linux";
+      lib = sapohub.inputs.nixpkgs.lib;
 
       modules = [
         sapohub.sapohubModules.hello
@@ -45,11 +46,12 @@
       depsHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       npmDepsHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
-      # UI preferences you want hand-fixed rather than left to whatever's
-      # synced from the Settings page (see sapohub-prefs.nix). Empty by
-      # default — add entries like "dashboard_button.my_plate" = "preview";
-      # here, not inline below, so there's exactly one place to edit.
-      prefs = { };
+      # Machine-owned, written by `sapohub-deploy --sync-prefs` into
+      # .sapohub/sapohub-prefs.nix at THIS repo's own root — every config
+      # repo that's an actual deploy.flakePath target needs this same line
+      # (see nix/deploy-script.nix for what writes it). No stub file needs
+      # to exist up front; pathExists just skips it until the first sync.
+      prefsImport = lib.optional (builtins.pathExists ./.sapohub/sapohub-prefs.nix) ./.sapohub/sapohub-prefs.nix;
 
       hub = sapohub.lib.mkSapoHub {
         inherit system modules depsHash npmDepsHash;
@@ -63,11 +65,7 @@
       # Nothing here assumes it owns the whole host.
       sapohubModulesForHost = [
         sapohub.nixosModules.default
-        # Machine-owned, kept in sync by deploys — see sapohub-prefs.nix.
-        # Committed as an empty stub so this import works from the very
-        # first `nixos-rebuild switch`, before any deploy has run. Copy
-        # sapohub-prefs.nix alongside your own flake.nix too.
-        ./sapohub-prefs.nix
+      ] ++ prefsImport ++ [
         {
           services.sapohub = {
             enable = true;
@@ -113,7 +111,6 @@
             # services.sapohub.deploy's option docs in SapoHub-2.0's
             # nix/nixos-module.nix for the full autoUpdateInputs/
             # updateInputNames explanation.
-            inherit prefs; # plain assignment — wins over sapohub-prefs.nix's mkDefault-wrapped values
           };
         }
       ];
@@ -128,8 +125,8 @@
       };
 
       # Exposed too, for anyone who'd rather splice the pieces by hand
-      # instead of importing the module above (e.g. to omit
-      # sapohub-prefs.nix, or reorder relative to other modules).
+      # instead of importing the module above (e.g. to reorder relative to
+      # other modules).
       inherit sapohubModulesForHost;
     };
 }

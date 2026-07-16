@@ -105,9 +105,10 @@
           # for) and seed deployFlakePath by hand instead, same as before.
         , configRepoUrl ? null
           # Extra NixOS modules appended after everything below — e.g. a
-          # ./sapohub-prefs.nix import, or per-host overrides. NOT to be
-          # confused with `modules` above (the SapoHub *utility* modules
-          # passed to mkSapoHub, e.g. sapohubModules.my_plate).
+          # conditional .sapohub/sapohub-prefs.nix import, or per-host
+          # overrides. NOT to be confused with `modules` above (the
+          # SapoHub *utility* modules passed to mkSapoHub, e.g.
+          # sapohubModules.my_plate).
         , extraNixosModules ? [ ]
         }:
         let
