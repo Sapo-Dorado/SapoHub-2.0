@@ -88,8 +88,31 @@
             # `git clone` needed before your first `sapohub-deploy`/Deploy
             # button press. Leave unset if you're managing that checkout
             # some other way already.
+            #
+            # IMPORTANT if you're layering configs (e.g. this file itself
+            # gets imported by a FURTHER outer flake, rather than being
+            # your top-level config directly): deploy.repoUrl/flakePath
+            # must always point at whichever flake is the true outermost
+            # one — the one that actually defines
+            # nixosConfigurations.<flakeAttr>. Never leave it to a default
+            # inherited from an imported dependency; unlike flakeAttr
+            # (which has no default and forces you to set it), repoUrl
+            # DOES have one and can silently carry over from whatever you
+            # import, pointing sapohub-deploy at the wrong repo entirely.
             # deploy.repoUrl = "https://github.com/you/your-config-repo";
             # assistant.browser.enable = true;
+            #
+            # If your setup layers a further flake on top of THIS one
+            # (importing it as `sapohub.sapohubModule`-style dependency
+            # rather than being the top-level config), that outer flake
+            # also needs deploy.updateInputNames set to reach through
+            # this one — e.g. `[ "my-config/sapohub" ]` if it names this
+            # input "my-config" — so `deploy.autoUpdateInputs` (on by
+            # default) actually bumps the right transitive pin instead of
+            # a nonexistent top-level "sapohub" input. See
+            # services.sapohub.deploy's option docs in SapoHub-2.0's
+            # nix/nixos-module.nix for the full autoUpdateInputs/
+            # updateInputNames explanation.
             inherit prefs; # plain assignment — wins over sapohub-prefs.nix's mkDefault-wrapped values
           };
         }

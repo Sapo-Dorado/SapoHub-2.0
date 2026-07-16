@@ -17,6 +17,8 @@ let
     flakeAttr = cfg.deploy.flakeAttr;
     stateDir = cfg.stateDir;
     secretsFile = cfg.secretsFile;
+    autoUpdateInputs = cfg.deploy.autoUpdateInputs;
+    updateInputNames = cfg.deploy.updateInputNames;
   };
 
   setSecretScript = import ./secret-script.nix { inherit pkgs lib; } {
@@ -217,6 +219,49 @@ in
           directly. Leave null if you're seeding `deploy.flakePath` some
           other way (e.g. it's already part of a checkout you manage by
           hand) — nothing here will touch it.
+
+          Like `flakeAttr`, this must describe the OUTERMOST flake — the
+          one that actually defines `nixosConfigurations.<flakeAttr>` — not
+          some shared/reusable modules bundle that flake happens to import
+          as an input. Setting this to a bundle's own repo instead of your
+          real root flake's is a silent footgun: `sapohub-deploy` will
+          clone and rebuild the bundle directly, which likely doesn't even
+          contain the attribute you're targeting. If your setup layers a
+          shared personal-modules repo underneath your actual per-machine
+          flake, this option belongs on the per-machine flake, pointing at
+          itself — never left to leak in from whatever the shared bundle
+          sets for its own standalone/test use.
+        '';
+      };
+      autoUpdateInputs = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Before each rebuild, run `nix flake lock --update-input <name>`
+          (see `updateInputNames`) against `flakePath`, committing and
+          pushing the resulting `flake.lock` change if there is one (same
+          commit/push mechanism `--sync-prefs` already uses). This is what
+          lets a plain redeploy pick up new SapoHub-2.0 releases without a
+          separate manual `nix flake update` + commit + push cycle. Set to
+          false to pin exactly whatever `flake.lock` already has — a
+          redeploy then only re-applies config changes already committed to
+          `flakePath` itself, never bumping any input on its own.
+        '';
+      };
+      updateInputNames = mkOption {
+        type = types.listOf types.str;
+        default = [ "sapohub" ];
+        description = ''
+          Flake input name(s) `autoUpdateInputs` should bump — must match
+          whatever your config actually calls the SapoHub-2.0 input (every
+          example in this repo uses `sapohub`, hence the default). Supports
+          `nix flake lock`'s dotted-path syntax for reaching a nested input
+          through an intermediate one, e.g. a config that imports a shared
+          personal-modules flake (which itself depends on SapoHub-2.0)
+          would set this to `[ "personal-modules/sapohub" ]` (or include
+          the intermediate input's own name too, if it should also be
+          bumped independently). Ignored entirely when `autoUpdateInputs`
+          is false.
         '';
       };
     };

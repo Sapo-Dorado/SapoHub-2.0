@@ -17,6 +17,8 @@
 , flakeAttr   # e.g. "nixos"
 , stateDir    # e.g. "/var/lib/sapohub"
 , secretsFile # e.g. "/etc/sapohub/secrets.env" — root-only; may hold GITHUB_TOKEN
+, autoUpdateInputs # bool — bump updateInputNames before every rebuild
+, updateInputNames # [ str ] — flake input name(s)/dotted-paths to bump
 }:
 
 let
@@ -110,6 +112,8 @@ let
   FLAKE_ATTR="${flakeAttr}"
   STATE_DIR="${stateDir}"
   SECRETS_FILE="${secretsFile}"
+  AUTO_UPDATE_INPUTS="${lib.optionalString autoUpdateInputs "1"}"
+  UPDATE_INPUT_NAMES="${lib.concatStringsSep " " updateInputNames}"
 
   # Persist everything this script prints to a log file from the very
   # first line, IN ADDITION to the PTY the browser terminal is attached
@@ -197,6 +201,46 @@ let
     git -C "$FLAKE_PATH" pull --ff-only
   fi
 
+  # Bump the input(s) named in updateInputNames (default: just "sapohub")
+  # so a plain redeploy picks up new SapoHub-2.0 releases without a
+  # separate manual `nix flake update` + commit + push cycle. Entirely
+  # skipped when autoUpdateInputs is false — a redeploy then only ever
+  # rebuilds from whatever flake.lock already has, unchanged from today's
+  # behavior. `nix flake update` failing (bad input name after a config
+  # was set up for a layered input path but never actually renamed,
+  # transient network issue, whatever) is deliberately non-fatal, same
+  # spirit as the sync-prefs push below — this step bumping nothing is
+  # never worse than the rebuild simply using what's already committed,
+  # so it must never be the reason a redeploy doesn't happen at all.
+  if [ -n "$AUTO_UPDATE_INPUTS" ]; then
+    echo "checking for updates to: $UPDATE_INPUT_NAMES ..."
+    if nix flake update $UPDATE_INPUT_NAMES --flake "$FLAKE_PATH"; then
+      if ! git -C "$FLAKE_PATH" diff --quiet -- flake.lock; then
+        echo "flake.lock changed — committing ..."
+        git -C "$FLAKE_PATH" add flake.lock
+        # Identity comes from ambient /etc/gitconfig, same as the
+        # sync-prefs commit below.
+        git -C "$FLAKE_PATH" commit -m "sapohub: bump $UPDATE_INPUT_NAMES"
+
+        if [ -n "$GITHUB_TOKEN" ]; then
+          REMOTE_URL="$(git -C "$FLAKE_PATH" remote get-url origin)"
+          AUTH_URL="$(printf '%s' "$REMOTE_URL" | sed "s|https://|https://x-access-token:$GITHUB_TOKEN@|")"
+          if ! git -C "$FLAKE_PATH" push "$AUTH_URL"; then
+            echo "WARNING: push of updated flake.lock failed (see above) — commit made locally but not pushed; continuing with rebuild" >&2
+            WARNINGS="''${WARNINGS:+$WARNINGS; }push of updated flake.lock failed — bump applied locally and used for this rebuild, but not pushed to GitHub"
+          fi
+        else
+          echo "GITHUB_TOKEN not set in $SECRETS_FILE — commit made locally but not pushed" >&2
+        fi
+      else
+        echo "flake.lock unchanged — already up to date"
+      fi
+    else
+      echo "WARNING: nix flake update failed (see above) — continuing with whatever flake.lock already has" >&2
+      WARNINGS="''${WARNINGS:+$WARNINGS; }flake input update failed (check updateInputNames matches your config's actual input name) — rebuild used the existing flake.lock unchanged"
+    fi
+  fi
+
   # Sync the UI preference overlay into the config repo as a REAL nix
   # module file (lib.mkDefault, so hand-written config always wins). The
   # user's flake imports ./sapohub-prefs.nix. After a successful sync the
@@ -255,7 +299,7 @@ let
         AUTH_URL="$(printf '%s' "$REMOTE_URL" | sed "s|https://|https://x-access-token:$GITHUB_TOKEN@|")"
         if ! git -C "$FLAKE_PATH" push "$AUTH_URL"; then
           echo "WARNING: push to config repo failed (see above) — commit made locally but not pushed; continuing with rebuild" >&2
-          WARNINGS="push to config repo failed — preference change applied locally and used for this rebuild, but not pushed to GitHub (check GITHUB_TOKEN's write access)"
+          WARNINGS="''${WARNINGS:+$WARNINGS; }push to config repo failed — preference change applied locally and used for this rebuild, but not pushed to GitHub (check GITHUB_TOKEN's write access)"
         fi
       else
         # Deliberately NOT attempting a bare `git push` here — without a
