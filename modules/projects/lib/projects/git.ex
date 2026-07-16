@@ -26,14 +26,27 @@ defmodule Projects.Git do
 
   alias Projects.Disk
 
-  @doc "Clones `github_url` into `source_path(name)`. Returns `{:ok, output}` or `{:error, reason}`."
+  @doc """
+  Clones `github_url` into `source_path(name)`. Returns `{:ok, output}` or
+  `{:error, reason}`.
+
+  Clones over an authenticated URL (needed for private repos) but then
+  points `origin` back at the bare `github_url` — otherwise the token
+  ends up persisted in `.git/config` (readable via `git remote -v`) and
+  every later `push/1` re-wraps that already-authenticated URL through
+  `authed_url/1` again, producing a doubly-credentialed URL that git
+  rejects outright.
+  """
   def clone(name, github_url) do
     source = Disk.source_path(name)
 
-    with {:ok, _} <- File.rm_rf(source) do
-      run_git(Disk.project_root(name), ["clone", authed_url(github_url), "source"])
+    with {:ok, _} <- File.rm_rf(source),
+         {:ok, output} <- run_git(Disk.project_root(name), ["clone", authed_url(github_url), "source"]),
+         {:ok, _} <- run_git(source, ["remote", "set-url", "origin", github_url]) do
+      {:ok, output}
     else
       {:error, reason, _path} -> {:error, "Failed to remove source dir: #{reason}"}
+      {:error, reason} -> {:error, reason}
     end
   end
 
