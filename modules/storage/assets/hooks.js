@@ -53,7 +53,9 @@ const DownloadProgress = {
         }
       }
 
-      const blob = new Blob(chunks);
+      const blob = new Blob(chunks, {
+        type: res.headers.get("Content-Type") || "application/octet-stream",
+      });
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
@@ -61,7 +63,11 @@ const DownloadProgress = {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(objectUrl);
+      // Revoking immediately can race with the browser's own (async,
+      // especially on mobile Safari) read of the blob for the actual save —
+      // the download can silently never complete for a large file. Give it
+      // real headroom rather than revoking on the next tick.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
     } catch (err) {
       // Progress tracking failed (e.g. no Content-Length, network hiccup) —
       // still get the file to the user via a normal navigation-based download.
