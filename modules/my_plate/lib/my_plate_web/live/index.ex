@@ -11,6 +11,7 @@ defmodule MyPlateWeb.Live.Index do
   """
   use SapoKit.Web, :live_view
 
+  alias MyPlate.Board
   alias MyPlate.RecurringTask
 
   @priorities ["high", "medium", "low"]
@@ -20,15 +21,44 @@ defmodule MyPlateWeb.Live.Index do
     if connected?(socket), do: SapoKit.PubSub.subscribe("my_plate:tasks")
 
     {:ok,
-     socket
-     |> assign(
+     assign(socket,
        adding_to: nil,
        recurring_open: false,
        recurring_editing: nil,
        recurring_tasks: [],
-       recurring_form: nil
-     )
-     |> load()}
+       recurring_form: nil,
+       board_menu_open: false,
+       boards_modal_open: false,
+       board_editing: nil,
+       board_form: nil,
+       confirm_delete_board: nil
+     )}
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    case resolve_scope(params["board_id"]) do
+      {:ok, scope} ->
+        {:noreply,
+         socket
+         |> assign(scope: scope, boards: MyPlate.list_boards(), board_menu_open: false)
+         |> load()}
+
+      :not_found ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "board not found")
+         |> push_navigate(to: "/my-plate")}
+    end
+  end
+
+  defp resolve_scope(nil), do: {:ok, :global}
+
+  defp resolve_scope(board_id) do
+    case MyPlate.get_board(board_id) do
+      nil -> :not_found
+      board -> {:ok, {:board, board}}
+    end
   end
 
   # ── Tasks ────────────────────────────────────────────────────────────────
@@ -43,7 +73,10 @@ defmodule MyPlateWeb.Live.Index do
   end
 
   def handle_event("create_task", %{"task" => params}, socket) do
-    params = Map.put_new(params, "due_date", nil)
+    params =
+      params
+      |> Map.put_new("due_date", nil)
+      |> Map.put_new("board_id", scope_board_id(socket.assigns.scope))
 
     case MyPlate.create_task(params) do
       {:ok, _task} -> {:noreply, socket |> assign(adding_to: nil) |> load()}
@@ -68,6 +101,84 @@ defmodule MyPlateWeb.Live.Index do
       ) do
     {:ok, _} = MyPlate.reorder_task(id, priority, position)
     {:noreply, load(socket)}
+  end
+
+  # ── Board scope ──────────────────────────────────────────────────────────
+
+  def handle_event("toggle_board_menu", _, socket) do
+    {:noreply, assign(socket, board_menu_open: !socket.assigns.board_menu_open)}
+  end
+
+  def handle_event("close_board_menu", _, socket) do
+    {:noreply, assign(socket, board_menu_open: false)}
+  end
+
+  def handle_event("open_boards_modal", _, socket) do
+    {:noreply, assign(socket, boards_modal_open: true, board_menu_open: false)}
+  end
+
+  def handle_event("close_boards_modal", _, socket) do
+    {:noreply,
+     assign(socket, boards_modal_open: false, board_editing: nil, board_form: nil, confirm_delete_board: nil)}
+  end
+
+  def handle_event("new_board", _, socket) do
+    {:noreply, assign(socket, board_editing: :new, board_form: %{})}
+  end
+
+  def handle_event("edit_board", %{"id" => id}, socket) do
+    board = MyPlate.get_board!(id)
+    {:noreply, assign(socket, board_editing: id, board_form: %{"name" => board.name})}
+  end
+
+  def handle_event("cancel_board_form", _, socket) do
+    {:noreply, assign(socket, board_editing: nil, board_form: nil)}
+  end
+
+  def handle_event("update_board_form", %{"board" => params}, socket) do
+    {:noreply, assign(socket, board_form: params)}
+  end
+
+  def handle_event("save_board", %{"board" => params}, socket) do
+    result =
+      case socket.assigns.board_editing do
+        :new -> MyPlate.create_board(params)
+        id -> MyPlate.update_board(MyPlate.get_board!(id), params)
+      end
+
+    case result do
+      {:ok, _board} ->
+        {:noreply,
+         assign(socket, board_editing: nil, board_form: nil, boards: MyPlate.list_boards())}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, board_form: raw_params_with_errors(params, changeset))}
+    end
+  end
+
+  def handle_event("confirm_delete_board", %{"id" => id}, socket) do
+    {:noreply, assign(socket, confirm_delete_board: id)}
+  end
+
+  def handle_event("cancel_delete_board", _, socket) do
+    {:noreply, assign(socket, confirm_delete_board: nil)}
+  end
+
+  def handle_event("delete_board", %{"id" => id}, socket) do
+    {:ok, _} = MyPlate.delete_board(id)
+    deleted_current? = match?({:board, %Board{id: ^id}}, socket.assigns.scope)
+
+    socket =
+      assign(socket,
+        boards: MyPlate.list_boards(),
+        confirm_delete_board: nil
+      )
+
+    if deleted_current? do
+      {:noreply, push_navigate(socket, to: "/my-plate")}
+    else
+      {:noreply, load(socket)}
+    end
   end
 
   # ── Recurring tasks ─────────────────────────────────────────────────────
@@ -138,14 +249,23 @@ defmodule MyPlateWeb.Live.Index do
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   defp load(socket) do
-    tasks = MyPlate.list_active_tasks()
+    tasks = MyPlate.list_active_tasks(socket.assigns.scope)
 
     assign(socket,
-      page_title: "my plate",
+      page_title: page_title(socket.assigns.scope),
       groups: for(priority <- @priorities, do: {priority, Enum.filter(tasks, &(&1.priority == priority))}),
       count: length(tasks)
     )
   end
+
+  defp page_title(:global), do: "my plate"
+  defp page_title({:board, %Board{name: name}}), do: "my plate — #{name}"
+
+  defp scope_label(:global), do: "global"
+  defp scope_label({:board, %Board{name: name}}), do: name
+
+  defp scope_board_id(:global), do: nil
+  defp scope_board_id({:board, %Board{id: id}}), do: id
 
   defp recurring_form_data(%RecurringTask{} = rt) do
     %{
@@ -273,7 +393,67 @@ defmodule MyPlateWeb.Live.Index do
 
       <main class="max-w-[980px] mx-auto px-4 py-6 space-y-7">
         <div class="flex items-center justify-between">
-          <h1 class="font-mono text-[13.5px] font-semibold text-[#E6ECE9]">my plate</h1>
+          <div class="flex items-center gap-2.5">
+            <h1 class="font-mono text-[13.5px] font-semibold text-[#E6ECE9]">my plate</h1>
+            <div class="relative">
+              <button
+                phx-click="toggle_board_menu"
+                class="flex items-center gap-1 px-2.5 py-[5px] rounded-[4px] border border-[#242D31] font-mono text-[11.5px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
+              >
+                <span class="text-[9px] leading-none">▾</span> {scope_label(@scope)}
+              </button>
+
+              <div
+                :if={@board_menu_open}
+                phx-click-away="close_board_menu"
+                class="absolute left-0 top-[calc(100%+4px)] z-40 w-[200px] rounded-[4px] bg-[#151B1E] border border-[#242D31] py-1"
+              >
+                <.link
+                  patch="/my-plate"
+                  class={[
+                    "flex items-center gap-1.5 px-3 py-[7px] font-mono text-[12px] hover:bg-[#0D1113]",
+                    if(@scope == :global, do: "text-[#E6ECE9]", else: "text-[#86948F]")
+                  ]}
+                >
+                  <span class="w-[12px] shrink-0">{if @scope == :global, do: "✓"}</span> global
+                </.link>
+
+                <div :if={@boards != []} class="h-px my-1 bg-[#242D31]"></div>
+
+                <.link
+                  :for={board <- @boards}
+                  patch={"/my-plate/#{board.id}"}
+                  class={[
+                    "flex items-center gap-1.5 px-3 py-[7px] font-mono text-[12px] truncate hover:bg-[#0D1113]",
+                    if(match?({:board, %Board{id: id}} when id == board.id, @scope),
+                      do: "text-[#E6ECE9]",
+                      else: "text-[#86948F]"
+                    )
+                  ]}
+                >
+                  <span class="w-[12px] shrink-0">
+                    {if match?({:board, %Board{id: id}} when id == board.id, @scope), do: "✓"}
+                  </span>
+                  {board.name}
+                </.link>
+
+                <div class="h-px my-1 bg-[#242D31]"></div>
+
+                <button
+                  phx-click="open_boards_modal"
+                  class="w-full text-left px-3 py-[7px] font-mono text-[12px] text-[#86948F] hover:text-[#7FB069] hover:bg-[#0D1113] cursor-pointer"
+                >
+                  + new board
+                </button>
+                <button
+                  phx-click="open_boards_modal"
+                  class="w-full text-left px-3 py-[7px] font-mono text-[12px] text-[#86948F] hover:text-[#E6ECE9] hover:bg-[#0D1113] cursor-pointer"
+                >
+                  manage boards
+                </button>
+              </div>
+            </div>
+          </div>
           <button
             phx-click="show_recurring"
             class="flex items-center gap-1.5 px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[11.5px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
@@ -387,6 +567,13 @@ defmodule MyPlateWeb.Live.Index do
         editing={@recurring_editing}
         form={@recurring_form}
         recurring_tasks={@recurring_tasks}
+      />
+      <.boards_modal
+        :if={@boards_modal_open}
+        editing={@board_editing}
+        form={@board_form}
+        boards={@boards}
+        confirm_delete={@confirm_delete_board}
       />
     </div>
     """
@@ -650,6 +837,133 @@ defmodule MyPlateWeb.Live.Index do
         <button
           type="button"
           phx-click="cancel_recurring_form"
+          class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[12px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
+        >
+          Back
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-[7px] rounded-[4px] bg-[#7FB069] hover:bg-[#8fbf7b] text-[#0C1409] font-mono text-[12px] font-semibold tracking-[.02em] cursor-pointer"
+        >
+          {if @editing == :new, do: "Create", else: "Save"}
+        </button>
+      </div>
+    </form>
+    """
+  end
+
+  # ── Boards modal ──────────────────────────────────────────────────────────
+
+  attr :editing, :any, required: true
+  attr :form, :any, required: true
+  attr :boards, :list, required: true
+  attr :confirm_delete, :any, required: true
+
+  defp boards_modal(assigns) do
+    ~H"""
+    <div
+      id="boards-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      phx-window-keydown="close_boards_modal"
+      phx-key="escape"
+    >
+      <div class="absolute inset-0" phx-click="close_boards_modal"></div>
+      <div class="relative w-full max-w-[420px] max-h-[80vh] overflow-y-auto rounded-[4px] bg-[#151B1E] border border-[#242D31]">
+        <div class="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#242D31]">
+          <div class="font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
+            boards
+          </div>
+          <button phx-click="close_boards_modal" class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer">×</button>
+        </div>
+
+        <div class="p-4">
+          <.board_form :if={@editing} editing={@editing} form={@form} />
+
+          <div :if={!@editing} class="space-y-3">
+            <button
+              phx-click="new_board"
+              class="w-full px-3 py-[9px] rounded-[4px] border border-dashed border-[#242D31] font-mono text-[12px] text-[#86948F] hover:text-[#7FB069] hover:border-[#3C5934] cursor-pointer"
+            >
+              + new board
+            </button>
+
+            <p :if={@boards == []} class="font-mono text-[12px] text-[#86948F] py-2">
+              No boards yet.
+            </p>
+
+            <ul :if={@boards != []} class="border border-[#242D31] rounded-[4px] divide-y divide-[#242D31]">
+              <li :for={board <- @boards} class="px-3 py-2.5">
+                <div :if={@confirm_delete != board.id} class="flex items-center gap-3">
+                  <div class="flex-1 min-w-0 text-sm truncate text-[#E6ECE9]">{board.name}</div>
+                  <button
+                    phx-click="edit_board"
+                    phx-value-id={board.id}
+                    class="font-mono text-[11px] text-[#86948F] hover:text-[#E6ECE9] cursor-pointer"
+                  >
+                    edit
+                  </button>
+                  <button
+                    phx-click="confirm_delete_board"
+                    phx-value-id={board.id}
+                    class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div :if={@confirm_delete == board.id} class="flex items-center gap-3">
+                  <div class="flex-1 min-w-0 font-mono text-[11.5px] text-[#E0A458]">
+                    delete "{board.name}"? this deletes every task in it too.
+                  </div>
+                  <button
+                    phx-click="cancel_delete_board"
+                    class="font-mono text-[11px] text-[#86948F] hover:text-[#E6ECE9] cursor-pointer"
+                  >
+                    cancel
+                  </button>
+                  <button
+                    phx-click="delete_board"
+                    phx-value-id={board.id}
+                    class="font-mono text-[11px] text-[#E0A458] hover:text-[#c96b4d] cursor-pointer"
+                  >
+                    delete
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :editing, :any, required: true
+  attr :form, :any, required: true
+
+  defp board_form(assigns) do
+    f = assigns.form || %{}
+    assigns = assign(assigns, name: f["name"] || "")
+
+    ~H"""
+    <form phx-submit="save_board" phx-change="update_board_form" class="space-y-3">
+      <div>
+        <label class="block font-mono text-[11px] text-[#86948F] mb-1.5">name</label>
+        <input
+          type="text"
+          name="board[name]"
+          value={@name}
+          placeholder="Board name…"
+          autocomplete="off"
+          autofocus
+          required
+          class="w-full px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] placeholder-[#86948F] focus:border-[#7FB069] focus:outline-none"
+        />
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button
+          type="button"
+          phx-click="cancel_board_form"
           class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[12px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
         >
           Back

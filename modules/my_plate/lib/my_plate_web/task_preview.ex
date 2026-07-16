@@ -1,8 +1,11 @@
 defmodule MyPlateWeb.TaskPreview do
   @moduledoc """
   Dashboard tile variant: a live preview of the most urgent active tasks
-  (see `MyPlate.list_tasks_by_urgency/0` — soonest due date first, then
-  priority). Declares itself `size: :wide` in `MyPlate.Module` — a short
+  (see `MyPlate.list_tasks_by_urgency/1` — soonest due date first, then
+  priority; defaults to the `:global` scope, same as My Plate's own
+  landing page — a task buried in a board with no due date stays off
+  this preview until its board is opened). Declares itself `size: :wide`
+  in `MyPlate.Module` — a short
   list needs real room, which is exactly the bar for reaching for a
   custom tile instead of a one-line statusline item (see
   `SapoKit.DashboardButton`). Rendered inside the dashboard slot; the

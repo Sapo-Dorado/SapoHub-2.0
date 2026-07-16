@@ -9,6 +9,7 @@ defmodule MyPlate do
 
   import Ecto.Query
 
+  alias MyPlate.Board
   alias MyPlate.RecurringTask
   alias MyPlate.Task
   alias SapoKit.Repo
@@ -33,7 +34,19 @@ defmodule MyPlate do
 
   # ── Tasks ──────────────────────────────────────────────────────────────────
 
-  def list_active_tasks do
+  # Scopes a task query to either `:global` (unassigned tasks, plus any
+  # board task that has a due date — a board task only stays tucked away
+  # on its own board's page while it's undated) or `{:board, board_id}`
+  # (every task in that board, dated or not).
+  defp in_scope(query, :global) do
+    where(query, [t], is_nil(t.board_id) or not is_nil(t.due_date))
+  end
+
+  defp in_scope(query, {:board, board_id}) do
+    where(query, [t], t.board_id == ^board_id)
+  end
+
+  def list_active_tasks(scope \\ :global) do
     priority_order =
       dynamic(
         [t],
@@ -42,6 +55,7 @@ defmodule MyPlate do
 
     Task
     |> where([t], t.completed == false)
+    |> in_scope(scope)
     |> order_by(^[asc: priority_order, asc: dynamic([t], t.position)])
     |> Repo.all()
   end
@@ -49,12 +63,13 @@ defmodule MyPlate do
   @doc """
   Active tasks ordered by urgency: soonest due date first (undated tasks
   last), priority breaking ties. Used by the dashboard preview tile —
-  `list_active_tasks/0` orders by priority alone, for the full task list
+  `list_active_tasks/1` orders by priority alone, for the full task list
   grouped into priority sections.
   """
-  def list_tasks_by_urgency do
+  def list_tasks_by_urgency(scope \\ :global) do
     Task
     |> where([t], t.completed == false)
+    |> in_scope(scope)
     |> Repo.all()
     |> Enum.sort_by(&urgency_key/1)
   end
@@ -70,7 +85,10 @@ defmodule MyPlate do
   defp priority_rank(_), do: 3
 
   def count_active_tasks do
-    Repo.aggregate(where(Task, [t], t.completed == false), :count)
+    Task
+    |> where([t], t.completed == false)
+    |> in_scope(:global)
+    |> Repo.aggregate(:count)
   end
 
   def count_due_today do
@@ -161,6 +179,50 @@ defmodule MyPlate do
       updated
     end)
   end
+
+  # ── Boards ─────────────────────────────────────────────────────────────────
+
+  def list_boards do
+    Board |> order_by([b], asc: b.position, asc: b.name) |> Repo.all()
+  end
+
+  def get_board!(id), do: Repo.get!(Board, id)
+
+  def get_board(id), do: Repo.get(Board, id)
+
+  def create_board(attrs) do
+    %Board{}
+    |> Board.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def update_board(%Board{} = board, attrs) do
+    board
+    |> Board.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes a board and every task in it. Tasks are removed one at a time
+  through the existing `delete_task/1` (not a bulk query) so its
+  `cancel_reminder`/broadcast side effects still run for each — otherwise
+  a task's scheduled due-date reminder would outlive the task itself.
+  """
+  def delete_board(%Board{} = board) do
+    Repo.transaction(fn ->
+      Task
+      |> where([t], t.board_id == ^board.id)
+      |> Repo.all()
+      |> Enum.each(&delete_task/1)
+
+      case Repo.delete(board) do
+        {:ok, deleted} -> deleted
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  def delete_board(id) when is_binary(id), do: id |> get_board!() |> delete_board()
 
   # ── Recurring tasks ────────────────────────────────────────────────────────
 

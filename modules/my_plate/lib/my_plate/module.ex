@@ -54,7 +54,10 @@ defmodule MyPlate.Module do
 
   @impl true
   def ui_routes do
-    [%{path: "/my-plate", live_view: MyPlateWeb.Live.Index, action: :index}]
+    [
+      %{path: "/my-plate", live_view: MyPlateWeb.Live.Index, action: :index},
+      %{path: "/my-plate/:board_id", live_view: MyPlateWeb.Live.Index, action: :index}
+    ]
   end
 
   @impl true

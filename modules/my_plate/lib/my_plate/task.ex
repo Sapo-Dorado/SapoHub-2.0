@@ -14,6 +14,7 @@ defmodule MyPlate.Task do
     field :completed, :boolean, default: false
     field :completed_at, :utc_datetime
     field :recurring_task_id, :binary_id
+    field :board_id, :binary_id
 
     timestamps()
   end
@@ -29,7 +30,8 @@ defmodule MyPlate.Task do
       :due_date,
       :completed,
       :completed_at,
-      :recurring_task_id
+      :recurring_task_id,
+      :board_id
     ])
     |> validate_required([:title, :priority])
     |> validate_inclusion(:priority, @priorities)
