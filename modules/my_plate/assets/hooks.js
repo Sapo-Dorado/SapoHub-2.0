@@ -10,6 +10,16 @@
 import Sortable from "./vendor/sortable.js";
 
 export default {
+  // Mounted on the add-task title input. Native `autofocus` only fires on
+  // first insertion in some browsers and never selects existing text, so
+  // this hook does both explicitly whenever the input (re)appears.
+  AutoSelect: {
+    mounted() {
+      this.el.focus();
+      this.el.select();
+    },
+  },
+
   // Mounted on each priority section's task list. `data-group` is the
   // priority name ("high"/"medium"/"low"); dragging a task into a
   // different section's list re-parents it there. On drop, pushes

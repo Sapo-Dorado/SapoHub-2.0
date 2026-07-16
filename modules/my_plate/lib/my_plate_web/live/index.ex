@@ -23,6 +23,7 @@ defmodule MyPlateWeb.Live.Index do
     {:ok,
      assign(socket,
        adding_to: nil,
+       editing_due_date: nil,
        recurring_open: false,
        recurring_editing: nil,
        recurring_tasks: [],
@@ -101,6 +102,20 @@ defmodule MyPlateWeb.Live.Index do
       ) do
     {:ok, _} = MyPlate.reorder_task(id, priority, position)
     {:noreply, load(socket)}
+  end
+
+  def handle_event("edit_due_date", %{"id" => id}, socket) do
+    {:noreply, assign(socket, editing_due_date: id)}
+  end
+
+  def handle_event("cancel_due_date_edit", _, socket) do
+    {:noreply, assign(socket, editing_due_date: nil)}
+  end
+
+  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date}, socket) do
+    due_date = if due_date == "", do: nil, else: due_date
+    {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
+    {:noreply, socket |> assign(editing_due_date: nil) |> load()}
   end
 
   # ── Board scope ──────────────────────────────────────────────────────────
@@ -299,6 +314,19 @@ defmodule MyPlateWeb.Live.Index do
   defp priority_button("high"), do: "bg-[#C1594A] hover:bg-[#cc6a5b] text-[#1A0D0A]"
   defp priority_button("medium"), do: "bg-[#E0A458] hover:bg-[#e8b370] text-[#1A1206]"
   defp priority_button("low"), do: "bg-[#5B7A8C] hover:bg-[#6c8a9c] text-[#0A1216]"
+
+  defp due_date_class(due_date) do
+    if Date.compare(due_date, MyPlate.today()) != :gt,
+      do: "text-[#E0A458]",
+      else: "text-[#86948F] hover:text-[#E6ECE9]"
+  end
+
+  defp board_name(boards, board_id) do
+    case Enum.find(boards, &(&1.id == board_id)) do
+      nil -> nil
+      board -> board.name
+    end
+  end
 
   defp weekday_name(1), do: "Monday"
   defp weekday_name(2), do: "Tuesday"
@@ -508,7 +536,7 @@ defmodule MyPlateWeb.Live.Index do
                 :for={task <- tasks}
                 id={"task-#{task.id}"}
                 data-id={task.id}
-                class="flex items-center gap-3 px-3 py-3"
+                class="group flex items-center gap-3 px-3 py-3"
               >
                 <span class="drag-handle shrink-0 cursor-grab active:cursor-grabbing text-[#3C5934] hover:text-[#86948F] font-mono text-[13px] leading-none select-none px-0.5">
                   ⠿
@@ -523,20 +551,43 @@ defmodule MyPlateWeb.Live.Index do
                   ]}
                 >
                 </button>
-                <span class="flex-1 text-sm min-w-0 truncate">{task.title}</span>
+                <% board_name = @scope == :global && task.board_id && board_name(@boards, task.board_id) %>
+                <div class="flex-1 min-w-0 flex flex-col">
+                  <span class="text-sm truncate">{task.title}</span>
+                  <span :if={board_name} class="font-mono text-[10.5px] text-[#86948F] truncate">
+                    {board_name}
+                  </span>
+                </div>
                 <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]" title="Recurring task">↻</span>
-                <span
-                  :if={task.due_date}
+                <form
+                  :if={@editing_due_date == task.id}
+                  phx-change="save_due_date"
+                  phx-click-away="cancel_due_date_edit"
+                  class="shrink-0"
+                >
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <input
+                    type="date"
+                    name="due_date"
+                    value={task.due_date}
+                    autofocus
+                    class="font-mono text-[11.5px] px-1.5 py-[3px] rounded-[3px] bg-[#0D1113] border border-[#7FB069] text-[#E6ECE9] focus:outline-none [color-scheme:dark]"
+                  />
+                </form>
+                <button
+                  :if={@editing_due_date != task.id}
+                  phx-click="edit_due_date"
+                  phx-value-id={task.id}
                   class={[
-                    "font-mono text-[11.5px] whitespace-nowrap",
-                    if(Date.compare(task.due_date, MyPlate.today()) != :gt,
-                      do: "text-[#E0A458]",
-                      else: "text-[#86948F]"
+                    "shrink-0 font-mono text-[11.5px] whitespace-nowrap cursor-pointer transition-opacity",
+                    if(task.due_date,
+                      do: due_date_class(task.due_date),
+                      else: "text-[#86948F] opacity-40 group-hover:opacity-100 hover:text-[#E6ECE9]"
                     )
                   ]}
                 >
-                  {task.due_date}
-                </span>
+                  {task.due_date || "set due date"}
+                </button>
                 <button
                   phx-click="delete"
                   phx-value-id={task.id}
@@ -609,9 +660,10 @@ defmodule MyPlateWeb.Live.Index do
             <input
               type="text"
               name="task[title]"
+              id="add-task-title"
+              phx-hook="AutoSelect"
               placeholder="Task title…"
               autocomplete="off"
-              autofocus
               required
               class="w-full min-w-0 box-border px-3 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] placeholder-[#86948F] focus:border-[#7FB069] focus:outline-none"
             />
