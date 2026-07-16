@@ -172,6 +172,8 @@ defmodule StorageWeb.Live.Index do
 
   defp file_href(path), do: "/api/storage/files/" <> (path |> String.split("/") |> Enum.map_join("/", &URI.encode/1))
 
+  defp file_dom_id(path), do: "dl-" <> Integer.to_string(:erlang.phash2(path))
+
   defp folder_href([]), do: "/storage"
   defp folder_href(segments), do: "/storage/#{Enum.join(segments, "/")}"
 
@@ -361,7 +363,14 @@ defmodule StorageWeb.Live.Index do
             </span>
             <span class="text-[#86948F] w-16 text-right shrink-0">{format_size(file.size)}</span>
             <span class="text-[#86948F] w-32 text-right shrink-0">{format_mtime(file.mtime)}</span>
-            <a href={"#{file_href(file.path)}?dl=1"} download class="shrink-0 text-[#86948F] hover:text-[#7FB069]">⬇</a>
+            <a
+              id={file_dom_id(file.path)}
+              phx-hook="DownloadProgress"
+              phx-update="ignore"
+              href={"#{file_href(file.path)}?dl=1"}
+              download={file.name}
+              class="shrink-0 text-[#86948F] hover:text-[#7FB069]"
+            >⬇</a>
             <button
               phx-click="request_delete"
               phx-value-kind="file"
@@ -425,7 +434,14 @@ defmodule StorageWeb.Live.Index do
       <div class="relative flex items-center justify-between px-4 py-3 font-mono text-[11.5px] text-[#86948F] shrink-0">
         <span class="truncate">{@viewer.name}</span>
         <div class="flex items-center gap-4 shrink-0">
-          <a href={"#{@viewer.url}?dl=1"} download class="hover:text-[#7FB069]">download</a>
+          <a
+            id="viewer-download"
+            phx-hook="DownloadProgress"
+            phx-update="ignore"
+            href={"#{@viewer.url}?dl=1"}
+            download={@viewer.name}
+            class="hover:text-[#7FB069]"
+          >download</a>
           <button phx-click="close_viewer" class="hover:text-[#E6ECE9]">✕ close</button>
         </div>
       </div>

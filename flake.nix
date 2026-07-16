@@ -231,7 +231,7 @@
           elixirModule = "Storage.Module";
           config = { };
           cliFragment = true;
-          jsHooks = false;
+          jsHooks = true;
         };
         projects = {
           name = "projects";
