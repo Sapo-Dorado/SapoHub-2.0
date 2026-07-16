@@ -165,4 +165,24 @@ input[type="time"]::-webkit-datetime-edit-ampm-field {
   min-width: 0;
 }
 
+/* Backstop for the above: confirmed live on iOS Safari (reminders' date
+   input, no calendar icon glyph even rendered there) that zeroing every
+   text-segment pseudo-element's min-width still isn't sufficient — the
+   input was still measured ~21-24px wider than its sibling text input,
+   right at the ballpark of the shadow tree's calendar-picker-indicator
+   button, which the min-width rules above don't touch (it's a control,
+   not a text segment — shrinking it would make it unusable, and its
+   own intrinsic size seems to be what's still forcing the input's box
+   wider than declared on iOS regardless of the text segments shrinking).
+   Rather than chase exactly which sub-part is still oversized, clip
+   whatever doesn't fit at the input's own border the same way the
+   my_plate modal card already backstops overflow at the card level —
+   iOS's date/time inputs are tap-anywhere-to-open, not dependent on
+   hitting the (invisible-on-iOS-anyway) icon's hitbox, so clipping it
+   isn't expected to affect usability. */
+input[type="date"],
+input[type="time"] {
+  overflow: hidden;
+}
+
 /* This file is for your main application CSS */
