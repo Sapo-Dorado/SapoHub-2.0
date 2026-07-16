@@ -86,22 +86,22 @@ defmodule SapoCore.AiContext do
     - The live system config — what the Settings page's Deploy button
       actually rebuilds from (host options, services.sapohub.* settings,
       prefs, secrets file paths, disko/hardware config, etc.) — is a
-      SEPARATE git repo from this SapoHub-2.0 source tree, checked out on
-      disk at services.sapohub.deploy.flakePath (default
-      /etc/sapohub-config). It is NOT one of the Projects-module checkouts
-      unless someone has also added it as one. To find/confirm it:
-      `cat /etc/sapohub-config/flake.nix` (or `git -C /etc/sapohub-config
+      SEPARATE git repo from this SapoHub-2.0 source tree. The on-disk
+      checkout at services.sapohub.deploy.flakePath (default
+      /etc/sapohub-config) is what `sapohub-deploy` itself rebuilds from,
+      but it's root-owned and not the checkout to edit from an assistant
+      session — edit it via its Projects-module entry instead (add one
+      with `sapo projects create <name> <its-github-url>` if it isn't
+      already there) and use the same `sapo projects push`/`sync` tooling
+      described above. To find/confirm which repo it is: `cat
+      /etc/sapohub-config/flake.nix` (or `git -C /etc/sapohub-config
       remote get-url origin` for its GitHub URL — also visible as
       services.sapohub.deploy.repoUrl in whatever flake built this box, or
-      via `systemctl cat sapohub-config-clone`). It's a plain git checkout:
-      read or edit files on it directly, same ambient git identity applies
-      for any commit. If you don't have shell access to the box's
-      filesystem in a given session, add it as a Projects-module entry
-      instead (`sapo projects create <name> <its-github-url>`) to get the
-      same push/sync tooling described above. Editing it does NOT apply
-      anything by itself — it still takes a `sapohub-deploy` run (manual,
-      or the Settings Deploy button) to rebuild and restart the live
-      system from whatever's committed there, per the deploy rule above.
+      via `systemctl cat sapohub-config-clone`), then match that URL
+      against `sapo projects list`. Editing it does NOT apply anything by
+      itself — it still takes a `sapohub-deploy` run (manual, or the
+      Settings Deploy button) to rebuild and restart the live system from
+      whatever's committed there, per the deploy rule above.
     - Files written under a module's storage directory appear in the
       storage API and in snapshots automatically — no manual registration needed.
     """
