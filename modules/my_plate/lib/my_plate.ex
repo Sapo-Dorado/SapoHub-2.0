@@ -36,13 +36,16 @@ defmodule MyPlate do
 
   # Scopes a task query to either `:global` (unassigned tasks, plus any
   # board task that has a due date — a board task only stays tucked away
-  # on its own board's page while it's undated) or `{:board, board_id}`
-  # (every task in that board, dated or not).
+  # on its own board's page while it's undated) or `{:board, %Board{}}`
+  # (every task in that board, dated or not). Takes the loaded struct,
+  # not a bare id, because the LiveView already has it on hand (it needs
+  # the name for the page title) and builds `scope` that way everywhere
+  # else — see `resolve_scope/1`.
   defp in_scope(query, :global) do
     where(query, [t], is_nil(t.board_id) or not is_nil(t.due_date))
   end
 
-  defp in_scope(query, {:board, board_id}) do
+  defp in_scope(query, {:board, %Board{id: board_id}}) do
     where(query, [t], t.board_id == ^board_id)
   end
 
