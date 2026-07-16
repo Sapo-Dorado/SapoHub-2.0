@@ -139,11 +139,29 @@ html, body {
    Zeroing the shadow parts' min-width directly is the only way to let
    it actually shrink to its real content minimum. Firefox doesn't build
    these controls from shadow DOM, so these selectors are simply inert
-   there — no separate handling needed. */
+   there — no separate handling needed.
+
+   Zeroing only the outer edit box and its fields-wrapper (desktop
+   Chrome/Safari) was confirmed NOT sufficient on real iOS Safari — the
+   wrapper is a flex container and each individual segment (month/day/
+   year, hour/minute/ampm, and the literal separators between them) is
+   itself a flex item carrying its own default `min-width: auto`, which
+   iOS's layout honors even once the wrapper's own min-width is zeroed.
+   Zero every individual segment pseudo-element too so none of them can
+   hold the control open past the input's actual box. */
 input[type="date"]::-webkit-datetime-edit,
 input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field,
 input[type="time"]::-webkit-datetime-edit,
-input[type="time"]::-webkit-datetime-edit-fields-wrapper {
+input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]::-webkit-datetime-edit-text,
+input[type="time"]::-webkit-datetime-edit-hour-field,
+input[type="time"]::-webkit-datetime-edit-minute-field,
+input[type="time"]::-webkit-datetime-edit-second-field,
+input[type="time"]::-webkit-datetime-edit-ampm-field {
   min-width: 0;
 }
 
