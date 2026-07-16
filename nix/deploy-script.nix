@@ -160,6 +160,19 @@ let
     GITHUB_TOKEN="$(grep -m1 '^GITHUB_TOKEN=' "$SECRETS_FILE" | cut -d= -f2- || true)"
   fi
 
+  # Authenticate nix's own flake-input fetcher for the `github:` scheme —
+  # needed below by `nix flake update` itself (a private updateInputNames
+  # entry, e.g. a personal-modules repo, otherwise gets an unauthenticated
+  # fetch and GitHub's API 404s rather than 403s, hiding the repo entirely
+  # rather than explaining the failure). Same mechanism runRebuild sets up
+  # separately for `nixos-rebuild switch`'s own flake-input fetch — that
+  # one runs in a detached unit with its own clean env, so it can't inherit
+  # this. No-op (empty token) when GITHUB_TOKEN isn't set — public-only
+  # flake inputs keep working exactly as before.
+  if [ -n "$GITHUB_TOKEN" ]; then
+    export NIX_CONFIG="access-tokens = github.com=$GITHUB_TOKEN"
+  fi
+
   SNAPSHOT=""
   SYNC_PREFS=""
   while [ $# -gt 0 ]; do
