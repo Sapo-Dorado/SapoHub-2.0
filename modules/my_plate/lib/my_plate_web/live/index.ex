@@ -316,8 +316,6 @@ defmodule MyPlateWeb.Live.Index do
     assign(socket, undo_stack: stack)
   end
 
-  defp undo_label(task), do: "completed \"#{task.title}\""
-
   # ── Priority styling (shared across the task list and both modals) ──────
 
   defp priority_dot("high"), do: "bg-[#C1594A]"
@@ -633,7 +631,7 @@ defmodule MyPlateWeb.Live.Index do
           phx-click="undo"
           class="block mx-auto px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[11px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
         >
-          undo — {undo_label(hd(@undo_stack))}
+          undo
         </button>
       </main>
 
