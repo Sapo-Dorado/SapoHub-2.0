@@ -10,12 +10,13 @@ defmodule SapoCoreWeb.Api.StorageController do
     json(conn, Storage.list_files())
   end
 
-  def show(conn, %{"path" => parts}) do
+  def show(conn, %{"path" => parts} = params) do
     api_path = Path.join(parts)
+    disposition = if params["dl"] in ["1", "true"], do: :attachment, else: :inline
 
     with {:ok, abs} <- Storage.resolve(api_path),
          true <- File.regular?(abs) do
-      send_download(conn, {:file, abs}, filename: Path.basename(abs))
+      send_download(conn, {:file, abs}, filename: Path.basename(abs), disposition: disposition)
     else
       _ -> render_not_found(conn)
     end

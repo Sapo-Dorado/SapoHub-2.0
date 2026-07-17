@@ -125,8 +125,28 @@ defmodule StorageWeb.Live.Index do
   # ── Viewer ───────────────────────────────────────────────────────────────
 
   def handle_event("view", %{"path" => path, "name" => name}, socket) do
-    {:noreply,
-     assign(socket, viewer: %{path: path, name: name, type: classify(name), url: file_href(path)})}
+    type = classify(name)
+    viewer = %{path: path, name: name, type: type, url: file_href(path), content: nil}
+
+    socket =
+      case type do
+        :text ->
+          case Storage.read_text(path) do
+            {:ok, content} ->
+              assign(socket, viewer: %{viewer | content: content})
+
+            {:error, :too_large} ->
+              put_flash(socket, :error, "#{name} is too large to preview — download it instead")
+
+            {:error, _} ->
+              put_flash(socket, :error, "Could not read #{name}")
+          end
+
+        _ ->
+          assign(socket, viewer: viewer)
+      end
+
+    {:noreply, socket}
   end
 
   def handle_event("close_viewer", _, socket) do
@@ -191,12 +211,28 @@ defmodule StorageWeb.Live.Index do
     SapoKit.Time.format(dt, "%Y-%m-%d %H:%M")
   end
 
+  @text_extensions ~w(
+    .txt .md .markdown .rst .log .csv .tsv
+    .json .yaml .yml .toml .ini .cfg .conf .env .xml
+    .ex .exs .heex .eex .leex
+    .js .jsx .ts .tsx .mjs .cjs .vue .svelte
+    .py .rb .go .rs .c .h .cpp .hpp .cc .java .kt .swift .scala
+    .sh .bash .zsh .fish .ps1 .sql .lua .php .pl .r .nix
+    .html .htm .css .scss .sass .less .graphql .proto
+  )
+
+  @text_basenames ~w(
+    Dockerfile Makefile Rakefile Procfile Gemfile Vagrantfile
+    LICENSE README CHANGELOG .gitignore .dockerignore .editorconfig
+  )
+
   defp classify(name) do
     case name |> Path.extname() |> String.downcase() do
       ext when ext in ~w(.png .jpg .jpeg .gif .webp .svg .bmp .avif) -> :image
       ext when ext in ~w(.mp4 .webm .mov .mkv .avi .m4v) -> :video
       ".pdf" -> :pdf
-      _ -> :other
+      ext when ext in @text_extensions -> :text
+      _ -> if name in @text_basenames, do: :text, else: :other
     end
   end
 
@@ -445,12 +481,16 @@ defmodule StorageWeb.Live.Index do
           <button phx-click="close_viewer" class="hover:text-[#E6ECE9]">✕ close</button>
         </div>
       </div>
-      <div class="relative flex-1 flex items-center justify-center overflow-hidden p-4">
+      <div class={"relative flex-1 overflow-hidden p-4 " <> if(@viewer.type == :text, do: "flex", else: "flex items-center justify-center")}>
         <img :if={@viewer.type == :image} src={@viewer.url} class="max-w-full max-h-full object-contain" />
         <video :if={@viewer.type == :video} controls autoplay class="max-w-full max-h-full" src={@viewer.url}>
           Your browser does not support video playback.
         </video>
         <iframe :if={@viewer.type == :pdf} src={@viewer.url} class="w-full h-full border-0 bg-white"></iframe>
+        <pre
+          :if={@viewer.type == :text}
+          class="w-full h-full max-w-[960px] mx-auto overflow-auto rounded-[4px] border border-[#242D31] bg-[#151B1E] text-[#E6ECE9] text-[12px] font-mono p-4 whitespace-pre-wrap break-words"
+        >{@viewer.content}</pre>
       </div>
     </div>
     """

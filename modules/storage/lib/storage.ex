@@ -30,6 +30,26 @@ defmodule Storage do
   @spec delete_file(String.t()) :: :ok | {:error, term()}
   def delete_file(api_path), do: Facade.delete(api_path)
 
+  @max_preview_bytes 1_000_000
+
+  @doc """
+  Read a text/code/markdown file for inline preview. Capped at
+  #{@max_preview_bytes} bytes so a stray large file can't be pulled fully
+  into LiveView memory — callers should send people over the existing
+  download link for anything bigger.
+  """
+  @spec read_text(String.t()) :: {:ok, String.t()} | {:error, :too_large | term()}
+  def read_text(api_path) do
+    with {:ok, abs} <- Facade.resolve(api_path),
+         {:ok, %File.Stat{size: size}} <- File.stat(abs) do
+      if size > @max_preview_bytes do
+        {:error, :too_large}
+      else
+        File.read(abs)
+      end
+    end
+  end
+
   @doc """
   Save an uploaded file into the given folder (path segments, relative to
   the storage root — e.g. `["storage", "uploads"]`). Returns the API path
