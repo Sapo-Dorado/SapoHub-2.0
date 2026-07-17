@@ -23,7 +23,6 @@ defmodule MyPlateWeb.Live.Index do
     {:ok,
      assign(socket,
        adding_to: nil,
-       editing_due_date: nil,
        recurring_open: false,
        recurring_editing: nil,
        recurring_tasks: [],
@@ -32,7 +31,9 @@ defmodule MyPlateWeb.Live.Index do
        boards_modal_open: false,
        board_editing: nil,
        board_form: nil,
-       confirm_delete_board: nil
+       confirm_delete_board: nil,
+       confirm_delete_task: nil,
+       undo_stack: []
      )}
   end
 
@@ -86,13 +87,34 @@ defmodule MyPlateWeb.Live.Index do
   end
 
   def handle_event("complete", %{"id" => id}, socket) do
-    {:ok, _} = MyPlate.complete_task(id)
-    {:noreply, load(socket)}
+    task = MyPlate.get_task!(id)
+    {:ok, _} = MyPlate.complete_task(task)
+    {:noreply, socket |> push_undo(task) |> load()}
   end
 
-  def handle_event("delete", %{"id" => id}, socket) do
+  def handle_event("confirm_delete_task", %{"id" => id}, socket) do
+    task = MyPlate.get_task!(id)
+    {:noreply, assign(socket, confirm_delete_task: %{id: task.id, title: task.title})}
+  end
+
+  def handle_event("cancel_delete_task", _, socket) do
+    {:noreply, assign(socket, confirm_delete_task: nil)}
+  end
+
+  def handle_event("delete_task", %{"id" => id}, socket) do
     {:ok, _} = MyPlate.delete_task(id)
-    {:noreply, load(socket)}
+    {:noreply, socket |> assign(confirm_delete_task: nil) |> load()}
+  end
+
+  def handle_event("undo", _, socket) do
+    case socket.assigns.undo_stack do
+      [] ->
+        {:noreply, socket}
+
+      [task | rest] ->
+        {:ok, _} = MyPlate.uncomplete_task(MyPlate.get_task!(task.id))
+        {:noreply, socket |> assign(undo_stack: rest) |> load()}
+    end
   end
 
   def handle_event(
@@ -104,18 +126,10 @@ defmodule MyPlateWeb.Live.Index do
     {:noreply, load(socket)}
   end
 
-  def handle_event("edit_due_date", %{"id" => id}, socket) do
-    {:noreply, assign(socket, editing_due_date: id)}
-  end
-
-  def handle_event("cancel_due_date_edit", _, socket) do
-    {:noreply, assign(socket, editing_due_date: nil)}
-  end
-
   def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date}, socket) do
     due_date = if due_date == "", do: nil, else: due_date
     {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
-    {:noreply, socket |> assign(editing_due_date: nil) |> load()}
+    {:noreply, load(socket)}
   end
 
   # ── Board scope ──────────────────────────────────────────────────────────
@@ -296,6 +310,13 @@ defmodule MyPlateWeb.Live.Index do
 
   defp ok_or_raise({:ok, _}), do: :ok
   defp ok_or_raise({:error, reason}), do: raise("delete_recurring_task failed: #{inspect(reason)}")
+
+  defp push_undo(socket, task) do
+    stack = [task | socket.assigns.undo_stack] |> Enum.take(5)
+    assign(socket, undo_stack: stack)
+  end
+
+  defp undo_label(task), do: "completed \"#{task.title}\""
 
   # ── Priority styling (shared across the task list and both modals) ──────
 
@@ -559,37 +580,33 @@ defmodule MyPlateWeb.Live.Index do
                   </span>
                 </div>
                 <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]" title="Recurring task">↻</span>
-                <form
-                  :if={@editing_due_date == task.id}
-                  phx-change="save_due_date"
-                  phx-click-away="cancel_due_date_edit"
-                  class="shrink-0"
-                >
+                <form phx-change="save_due_date" class="shrink-0">
                   <input type="hidden" name="task_id" value={task.id} />
                   <input
                     type="date"
                     name="due_date"
+                    id={"due-date-input-#{task.id}"}
                     value={task.due_date}
-                    autofocus
-                    class="font-mono text-[11.5px] px-1.5 py-[3px] rounded-[3px] bg-[#0D1113] border border-[#7FB069] text-[#E6ECE9] focus:outline-none [color-scheme:dark]"
+                    class="sr-only"
                   />
+                  <button
+                    type="button"
+                    id={"due-date-btn-#{task.id}"}
+                    phx-hook="DueDatePicker"
+                    data-input-id={"due-date-input-#{task.id}"}
+                    class={[
+                      "font-mono text-[11.5px] whitespace-nowrap cursor-pointer transition-opacity",
+                      if(task.due_date,
+                        do: due_date_class(task.due_date),
+                        else: "text-[#86948F] opacity-40 group-hover:opacity-100 hover:text-[#E6ECE9]"
+                      )
+                    ]}
+                  >
+                    {task.due_date || "set due date"}
+                  </button>
                 </form>
                 <button
-                  :if={@editing_due_date != task.id}
-                  phx-click="edit_due_date"
-                  phx-value-id={task.id}
-                  class={[
-                    "shrink-0 font-mono text-[11.5px] whitespace-nowrap cursor-pointer transition-opacity",
-                    if(task.due_date,
-                      do: due_date_class(task.due_date),
-                      else: "text-[#86948F] opacity-40 group-hover:opacity-100 hover:text-[#E6ECE9]"
-                    )
-                  ]}
-                >
-                  {task.due_date || "set due date"}
-                </button>
-                <button
-                  phx-click="delete"
+                  phx-click="confirm_delete_task"
                   phx-value-id={task.id}
                   aria-label="Delete task"
                   class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
@@ -610,9 +627,18 @@ defmodule MyPlateWeb.Live.Index do
         <p :if={@count == 0} class="text-[#86948F] text-sm">
           Nothing on your plate. Add a task with the + on any priority above.
         </p>
+
+        <button
+          :if={@undo_stack != []}
+          phx-click="undo"
+          class="block mx-auto px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[11px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
+        >
+          undo — {undo_label(hd(@undo_stack))}
+        </button>
       </main>
 
       <.add_task_modal :if={@adding_to} priority={@adding_to} />
+      <.delete_task_modal :if={@confirm_delete_task} task={@confirm_delete_task} />
       <.recurring_modal
         :if={@recurring_open}
         editing={@recurring_editing}
@@ -716,6 +742,54 @@ defmodule MyPlateWeb.Live.Index do
             </button>
           </div>
         </form>
+      </div>
+    </div>
+    """
+  end
+
+  # ── Delete task confirmation modal ───────────────────────────────────────
+
+  attr :task, :map, required: true
+
+  defp delete_task_modal(assigns) do
+    ~H"""
+    <div
+      id="delete-task-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      phx-window-keydown="cancel_delete_task"
+      phx-key="escape"
+    >
+      <div class="absolute inset-0" phx-click="cancel_delete_task"></div>
+      <div class="relative w-full max-w-[400px] rounded-[4px] bg-[#151B1E] border border-[#242D31] border-l-[3px] border-l-[#C1594A] overflow-hidden">
+        <div class="px-4 pt-4 pb-3 border-b border-[#242D31]">
+          <div class="font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
+            delete task
+          </div>
+        </div>
+
+        <div class="px-4 py-4 space-y-4">
+          <p class="text-sm text-[#E6ECE9]">
+            Delete "<span class="font-semibold">{@task.title}</span>"? This can't be undone.
+          </p>
+
+          <div class="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              phx-click="cancel_delete_task"
+              class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[12px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              phx-click="delete_task"
+              phx-value-id={@task.id}
+              class="px-4 py-[7px] rounded-[4px] bg-[#C1594A] hover:bg-[#cc6a5b] text-[#1A0D0A] font-mono text-[12px] font-semibold tracking-[.02em] cursor-pointer"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     """

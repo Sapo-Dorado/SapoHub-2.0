@@ -20,6 +20,34 @@ export default {
     },
   },
 
+  // Mounted on the due-date trigger button. A single click should open the
+  // native date picker directly rather than requiring a first click to
+  // reveal an input and a second to open its picker — `showPicker()` opens
+  // it programmatically as long as it's called synchronously within the
+  // user gesture that reached this handler, which a direct click listener
+  // satisfies even though the picker belongs to a sibling `sr-only` input,
+  // not this button itself. Falls back to `.focus()` on browsers without
+  // `showPicker()` (older Firefox) — focusing a date input at least opens
+  // the OS picker on mobile, and lets keyboard entry work everywhere else.
+  DueDatePicker: {
+    mounted() {
+      this.el.addEventListener("click", () => {
+        const input = document.getElementById(this.el.dataset.inputId);
+        if (!input) return;
+
+        if (typeof input.showPicker === "function") {
+          try {
+            input.showPicker();
+            return;
+          } catch {
+            // falls through to focus() below (e.g. not user-activated)
+          }
+        }
+        input.focus();
+      });
+    },
+  },
+
   // Mounted on each priority section's task list. `data-group` is the
   // priority name ("high"/"medium"/"low"); dragging a task into a
   // different section's list re-parents it there. On drop, pushes
