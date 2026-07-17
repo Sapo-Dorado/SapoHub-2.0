@@ -65,10 +65,21 @@ defmodule Projects.Git do
       {:error, _} ->
         readme_path = Path.join(source, "README.md")
 
+        # Push plain (no "-u"): when GITHUB_TOKEN is set, the push goes to
+        # a one-off authed URL rather than the named "origin" remote, and
+        # git won't reliably attach "-u"'s upstream tracking to "origin"
+        # for a destination it doesn't recognize as that remote. So the
+        # tracking branch is wired up explicitly afterward instead,
+        # against "origin" by name — same fetch-by-name `pull/1` already
+        # relies on, so this makes no new assumption about auth.
         with :ok <- File.write(readme_path, "# #{name}\n"),
              {:ok, _} <- run_git(source, ["add", "README.md"]),
              {:ok, _} <- run_git(source, ["commit", "-m", "Initial commit"]),
-             {:ok, _} <- push(source, ["-u", "origin", "HEAD"]) do
+             {:ok, _} <- push(source, ["HEAD"]),
+             {:ok, branch} <- run_git(source, ["symbolic-ref", "--short", "HEAD"]),
+             {:ok, _} <- run_git(source, ["fetch", "origin"]),
+             {:ok, _} <-
+               run_git(source, ["branch", "--set-upstream-to=origin/#{String.trim(branch)}"]) do
           {:ok, :initialized}
         end
     end
@@ -185,7 +196,7 @@ defmodule Projects.Git do
         end
 
       _ ->
-        run_git(source, ["push" | extra_args])
+        run_git(source, ["push", "origin" | extra_args])
     end
   end
 
