@@ -8,10 +8,13 @@ defmodule SapoCoreWeb.DashboardLiveTest do
 
     assert html =~ ~s(id="slot-sapo_hello")
     assert html =~ ~s(id="slot-my_plate")
-    assert html =~ ~s(id="slot-assistant")
     # Settings is NOT a tile — it's the statusline gear.
     refute html =~ ~s(id="slot-settings")
     assert html =~ ~s(href="/settings")
+    # Assistant is NOT a tile either — it's the floating button in the
+    # root layout, on every page.
+    refute html =~ ~s(id="slot-assistant")
+    assert html =~ ~s(id="floating-assistant")
   end
 
   test "statusline shows core and module items", %{conn: conn} do
@@ -35,14 +38,14 @@ defmodule SapoCoreWeb.DashboardLiveTest do
   end
 
   test "dashboard_button pref switches a slot to the module component", %{conn: conn} do
-    :ok = SapoCore.Prefs.put("dashboard_button.my_plate", "status")
+    :ok = SapoCore.Prefs.put("dashboard_button.my_plate", "preview")
 
     on_exit(fn ->
       File.rm(Application.fetch_env!(:sapo_core, :prefs_overlay))
     end)
 
     {:ok, _view, html} = live(conn, ~p"/")
-    assert html =~ "active"
+    assert html =~ "no active tasks"
 
     :ok = SapoCore.Prefs.put("dashboard_button.my_plate", "default")
     {:ok, _view, html2} = live(conn, ~p"/")
