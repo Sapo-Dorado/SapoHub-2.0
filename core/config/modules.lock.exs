@@ -9,5 +9,6 @@
   {:my_plate, "../../modules/my_plate"},
   {:storage, "../../modules/storage"},
   {:reminders, "../../modules/reminders"},
-  {:projects, "../../modules/projects"}
+  {:projects, "../../modules/projects"},
+  {:recipes, "../../modules/recipes"}
 ]
