@@ -50,12 +50,14 @@ defmodule SapoCore.Assistant.SessionRunner do
     session_id = Keyword.fetch!(opts, :session_id)
     cols = if is_integer(opts[:cols]) and opts[:cols] > 0, do: opts[:cols], else: 220
     rows = if is_integer(opts[:rows]) and opts[:rows] > 0, do: opts[:rows], else: 50
+    name = opts[:name]
 
     send(self(), :spawn_session)
 
     {:ok,
      %{
        session_id: session_id,
+       name: name,
        pty_pid: nil,
        status: :starting,
        cols: cols,
@@ -74,6 +76,16 @@ defmodule SapoCore.Assistant.SessionRunner do
       if Application.get_env(:sapo_core, :assistant_chrome, false),
         do: args ++ ["--chrome"],
         else: args
+
+    args =
+      if SapoCore.Prefs.get("assistant.remote_control", false) do
+        case state.name do
+          name when is_binary(name) and name != "" -> args ++ ["--remote-control", name]
+          _ -> args ++ ["--remote-control"]
+        end
+      else
+        args
+      end
 
     args =
       case Assistant.system_prompt() do

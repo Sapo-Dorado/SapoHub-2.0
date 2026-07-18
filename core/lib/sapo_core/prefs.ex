@@ -32,6 +32,9 @@ defmodule SapoCore.Prefs do
     `SapoCore.Statusline`); when set, it's the definitive list (only
     those ids show); unset falls back to natural order filtered by each
     item's own `"statusline.<item_id>"` toggle
+  * `"assistant.remote_control"` → boolean; when true, new assistant
+    sessions (`SapoCore.Assistant.SessionRunner`) are spawned with
+    `claude --remote-control <tab name>`
   """
 
   @doc "Effective value for `key` (overlay wins over base, then default)."

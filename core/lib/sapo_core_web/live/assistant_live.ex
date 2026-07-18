@@ -214,7 +214,7 @@ defmodule SapoCoreWeb.AssistantLive do
             do: tab.terminal_rows,
             else: 30
 
-        case SessionSupervisor.start_session(session_id, cols: cols, rows: rows) do
+        case SessionSupervisor.start_session(session_id, cols: cols, rows: rows, name: tab.label) do
           {:ok, _} ->
             {:noreply,
              update_tab(socket, session_id, &%{&1 | starting_session: false, session_alive: true})}

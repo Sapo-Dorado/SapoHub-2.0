@@ -56,6 +56,7 @@ defmodule SapoCoreWeb.SettingsLive do
        dashboard_order: dashboard_order(),
        statusline_options: statusline_options(),
        statusline_order_active: SapoCore.Statusline.order_active?(),
+       remote_control_enabled: SapoCore.Prefs.get("assistant.remote_control", false),
        deploy_secret_ready: github_token_set?(),
        editing_secret: nil,
        secret_saving: false,
@@ -195,6 +196,12 @@ defmodule SapoCoreWeb.SettingsLive do
     |> SapoCore.Dashboard.save_order()
 
     {:noreply, assign(socket, dashboard_order: dashboard_order())}
+  end
+
+  def handle_event("toggle_remote_control", _params, socket) do
+    new_val = !socket.assigns.remote_control_enabled
+    :ok = SapoCore.Prefs.put("assistant.remote_control", new_val)
+    {:noreply, assign(socket, remote_control_enabled: new_val)}
   end
 
   def handle_event("toggle_statusline_item", %{"id" => id}, socket) do
@@ -615,6 +622,36 @@ defmodule SapoCoreWeb.SettingsLive do
                 </td>
               </tr>
             </table>
+          </div>
+        </section>
+
+        <section>
+          <.eyebrow>Assistant</.eyebrow>
+          <div class="border border-[#242D31] rounded-[4px] bg-[#151B1E] overflow-hidden">
+            <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+              <div>
+                <p class="font-mono text-[12.5px]">Remote Control</p>
+                <p class="text-[12px] text-[#86948F] mt-0.5">
+                  New assistant sessions start with <code>--remote-control</code>, reusing the
+                  tab's name, so they can be attached from claude.ai/code or the Claude mobile
+                  app. Requires each session to be logged in with a claude.ai subscription — API
+                  key auth doesn't support it, and until login happens the session just starts
+                  normally. Takes effect for new sessions only.
+                </p>
+              </div>
+              <button
+                phx-click="toggle_remote_control"
+                class={[
+                  "font-mono text-[11px] px-[7px] py-[2px] rounded-[3px] border shrink-0 cursor-pointer",
+                  if(@remote_control_enabled,
+                    do: "text-[#7FB069] border-[#3C5934]",
+                    else: "text-[#86948F] border-[#242D31]"
+                  )
+                ]}
+              >
+                {if @remote_control_enabled, do: "enabled", else: "disabled"}
+              </button>
+            </div>
           </div>
         </section>
 
