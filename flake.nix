@@ -252,6 +252,15 @@
           cliFragment = true;
           jsHooks = false;
         };
+        recipes = {
+          name = "recipes";
+          app = "recipes";
+          src = ./modules/recipes;
+          elixirModule = "Recipes.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = true;
+        };
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
