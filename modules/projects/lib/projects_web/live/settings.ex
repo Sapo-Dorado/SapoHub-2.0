@@ -95,6 +95,7 @@ defmodule ProjectsWeb.Live.Settings do
     ~H"""
     <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
       <SapoCoreWeb.Statusline.statusline crumb={"projects / #{@project.name} / settings"} items={@statusline} />
+      <SapoCoreWeb.Layouts.flash_group flash={@flash} />
 
       <main class="max-w-[640px] mx-auto px-4 py-6 space-y-7">
         <div>

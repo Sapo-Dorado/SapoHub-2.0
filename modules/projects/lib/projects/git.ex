@@ -10,10 +10,11 @@ defmodule Projects.Git do
   so it's already present in this app's own environment; no new secret
   plumbing needed. Mirrors `deploy-script.nix`'s exact approach: build a
   one-off `https://x-access-token:$GITHUB_TOKEN@...` URL and pass it only
-  as the explicit push/clone target, never persisted into `.git/config` or
-  `git remote -v` output. Optional — with no token set, public HTTPS
-  clone/pull/commit still work exactly as before; only pushes and private
-  clones need it, same degrade-gracefully behavior as the deploy path.
+  as the explicit push/fetch/clone target, never persisted into
+  `.git/config` or `git remote -v` output. Optional — with no token set,
+  public HTTPS clone/pull/commit still work exactly as before; only
+  pushes and private clones/pulls need it, same degrade-gracefully
+  behavior as the deploy path.
   Commit identity (needed by `initialize_if_empty/1`'s README commit, or
   by anything else run in this checkout that authors a commit — a human
   or assistant session at the shell, say) comes from the ambient
@@ -94,7 +95,7 @@ defmodule Projects.Git do
     source = Disk.source_path(name)
 
     with {:ok, _} <- check_clean(source),
-         {:ok, _} <- run_git(source, ["fetch", "origin"]),
+         {:ok, _} <- fetch(source),
          {:ok, ahead, behind} <- commit_counts(source),
          {:ok, _} <- push_if_ahead(source, ahead),
          {:ok, output} <- merge_if_behind(source, behind) do
@@ -176,6 +177,31 @@ defmodule Projects.Git do
     case push(source, []) do
       {:ok, output} -> {:ok, output}
       {:error, reason} -> {:error, "Push failed: #{reason}"}
+    end
+  end
+
+  # Fetches over an authenticated URL built just for this one fetch when
+  # GITHUB_TOKEN is set, updating the same `refs/remotes/origin/*` refs a
+  # plain `git fetch origin` would (`origin`'s own configured refspec) —
+  # never written to .git/config, never visible in `git remote -v`.
+  # Needed because `clone/2` deliberately points `origin` back at the
+  # bare, unauthenticated `github_url` after cloning, so private repos
+  # can't be fetched by remote name alone. Falls back to a bare
+  # `git fetch origin` (relying on ambient git config/credential helper,
+  # if any) when no token is set.
+  defp fetch(source) do
+    case System.get_env("GITHUB_TOKEN") do
+      token when is_binary(token) and token != "" ->
+        case run_git(source, ["remote", "get-url", "origin"]) do
+          {:ok, remote_url} ->
+            run_git(source, ["fetch", authed_url(String.trim(remote_url)), "+refs/heads/*:refs/remotes/origin/*"])
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      _ ->
+        run_git(source, ["fetch", "origin"])
     end
   end
 
