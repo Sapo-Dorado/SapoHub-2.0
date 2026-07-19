@@ -632,11 +632,7 @@ defmodule SapoCoreWeb.SettingsLive do
               <div>
                 <p class="font-mono text-[12.5px]">Remote Control</p>
                 <p class="text-[12px] text-[#86948F] mt-0.5">
-                  New assistant sessions start with <code>--remote-control</code>, reusing the
-                  tab's name, so they can be attached from claude.ai/code or the Claude mobile
-                  app. Requires each session to be logged in with a claude.ai subscription — API
-                  key auth doesn't support it, and until login happens the session just starts
-                  normally. Takes effect for new sessions only.
+                  Enables remote control by default for assistant sessions.
                 </p>
               </div>
               <button

@@ -195,6 +195,57 @@ in
         a real Chrome with a graphical session on a virtual display
         (Xvfb :99, persistent profile) for assistant sessions and skills
       '';
+
+      claudeDefaults = {
+        managed = mkOption {
+          type = types.attrs;
+          default = {
+            # Sandbox's cwd-tracking writes to /tmp/claude-{uid}/cwd-* then
+            # blocks itself from reading it back, so every Bash tool call
+            # reports exit code 1 even on success. Same PTY-spawned session
+            # architecture as v1, which hit this same bug (upstream issue
+            # anthropics/claude-code#22159) — managed settings apply to
+            # every session with no per-project patch file needed.
+            sandbox.enabled = false;
+          };
+          description = ''
+            Written verbatim to /etc/claude-code/managed-settings.json —
+            Claude Code's own org-wide, session-locking settings file. Applies
+            to every assistant session regardless of project or user prefs.
+          '';
+        };
+
+        user = mkOption {
+          type = types.attrs;
+          default = {
+            theme = "dark";
+            skipDangerousModePermissionPrompt = true;
+            agentPushNotifEnabled = true;
+            enabledPlugins."frontend-design@claude-plugins-official" = true;
+          };
+          description = ''
+            Fully overwrites `~/.claude/settings.json` for the sapohub user
+            via activation script, so it's rebuilt from these values (rather
+            than drifting as ad hoc runtime state) on every switch.
+          '';
+        };
+
+        projectDefaults = mkOption {
+          type = types.attrs;
+          default = {
+            hasTrustDialogAccepted = true;
+          };
+          description = ''
+            Merge-patched (never wholesale-overwritten) onto this workdir's
+            entry in `~/.claude.json` — `.projects."''${workDir}"` — on every
+            service start. Unlike settings.json, .claude.json is the CLI's
+            own mutable state (OAuth, cost history, MCP cache), so this only
+            ever touches the keys listed here, e.g. accepting the folder
+            trust dialog by default so remote-control sessions can start
+            unattended.
+          '';
+        };
+      };
     };
 
     deploy = {
@@ -351,6 +402,22 @@ in
       tlsDir = "/var/lib/sapohub-tls";
       tlsCertFile = "${tlsDir}/fullchain.pem";
       tlsKeyFile = "${tlsDir}/privkey.pem";
+
+      # Merge-patches cfg.assistant.claudeDefaults.projectDefaults onto
+      # .projects."${workDir}" in ~/.claude.json. That file is the CLI's own
+      # mutable state (OAuth, cost history, MCP cache) — everything else in
+      # it, and every other project's entry, is left untouched.
+      claudeProjectDefaultsScript = pkgs.writeShellScript "sapohub-claude-project-defaults" ''
+        set -euo pipefail
+        CLAUDE_JSON="${cfg.stateDir}/.claude.json"
+        [ -f "$CLAUDE_JSON" ] || echo '{}' > "$CLAUDE_JSON"
+        ${pkgs.jq}/bin/jq \
+          --argjson defaults '${builtins.toJSON cfg.assistant.claudeDefaults.projectDefaults}' \
+          --arg wd "${workDir}" \
+          '.projects[$wd] = ((.projects[$wd] // {}) * $defaults)' \
+          "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp"
+        mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
+      '';
     in
     {
       users.users.sapohub = {
@@ -413,6 +480,23 @@ in
 
       # Nix-declared prefs base; the app overlays local UI edits on top.
       environment.etc."sapohub/prefs.json".text = builtins.toJSON cfg.prefs;
+
+      # Claude Code's own org-wide, session-locking settings file — applies
+      # to every assistant session, no per-project patch file needed.
+      environment.etc."claude-code/managed-settings.json".text =
+        builtins.toJSON cfg.assistant.claudeDefaults.managed;
+
+      # Fully manage ~/.claude/settings.json for the sapohub user via
+      # activation script, so it's rebuilt from cfg.assistant.claudeDefaults.user
+      # (rather than drifting as ad hoc runtime state) on every switch.
+      system.activationScripts.sapohub-claude-settings = {
+        deps = [ "users" ];
+        text = ''
+          mkdir -p "${cfg.stateDir}/.claude"
+          echo '${builtins.toJSON cfg.assistant.claudeDefaults.user}' > "${cfg.stateDir}/.claude/settings.json"
+          chown -R sapohub:sapohub "${cfg.stateDir}/.claude"
+        '';
+      };
 
       # System-wide default git identity (see gitIdentity's description) —
       # /etc/gitconfig is consulted by git for every user on the box unless
@@ -523,6 +607,7 @@ in
             # Restore a staged snapshot (if any), THEN migrate forward.
             "${bin} eval SapoCore.Release.maybe_restore()"
             "${bin} eval SapoCore.Release.migrate()"
+            "${claudeProjectDefaultsScript}"
           ];
           ExecStart = "${bin} start";
           Restart = "on-failure";
