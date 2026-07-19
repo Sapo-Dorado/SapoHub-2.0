@@ -14,7 +14,15 @@ defmodule SkillsWeb.Live.Index do
     {:ok, socket |> assign(confirm_delete: nil, viewer: nil) |> load()}
   end
 
-  defp load(socket), do: assign(socket, skills: Skills.list_skills())
+  defp load(socket) do
+    skills = Skills.list_skills()
+
+    assign(socket,
+      skills: skills,
+      marketplace_skills: Enum.filter(skills, &(&1.kind == "marketplace")),
+      custom_skills: Enum.filter(skills, &(&1.kind == "custom"))
+    )
+  end
 
   # ── Viewer ───────────────────────────────────────────────────────────────
 
@@ -52,11 +60,45 @@ defmodule SkillsWeb.Live.Index do
 
   # ── Helpers ──────────────────────────────────────────────────────────────
 
-  defp kind_label("marketplace"), do: "marketplace"
-  defp kind_label("custom"), do: "custom"
+  defp skill_section(assigns) do
+    ~H"""
+    <div class="space-y-2">
+      <div class="flex items-center gap-2.5 font-mono text-[10.5px] font-semibold uppercase tracking-[.14em] text-[#86948F]">
+        <span>{@title}</span>
+        <span class="h-px flex-1 bg-[#242D31]"></span>
+      </div>
 
-  defp kind_color("marketplace"), do: "#7FB0C9"
-  defp kind_color("custom"), do: "#D9A441"
+      <div class="rounded-[4px] border border-[#242D31] divide-y divide-[#242D31] overflow-hidden">
+        <div :for={skill <- @skills} class="flex flex-col gap-1 px-3 py-2.5 bg-[#151B1E] font-mono text-[12px]">
+          <div class="flex items-center gap-3">
+            <button
+              :if={skill.kind == "custom"}
+              phx-click="view"
+              phx-value-id={skill.id}
+              class="flex-1 min-w-0 text-left truncate text-[#E6ECE9] hover:text-[#7FB069]"
+              title={skill.name}
+            >{skill.name}</button>
+            <span
+              :if={skill.kind != "custom"}
+              class="flex-1 min-w-0 truncate text-[#E6ECE9]"
+              title={skill.name}
+            >{skill.name}</span>
+            <button
+              phx-click="request_delete"
+              phx-value-id={skill.id}
+              class="shrink-0 text-[#86948F] hover:text-[#E05C5C]"
+            >✕</button>
+          </div>
+          <span :if={skill.marketplace} class="text-[#86948F] text-[10.5px] truncate">@{skill.marketplace}</span>
+        </div>
+
+        <p :if={@skills == []} class="px-3 py-4 text-center font-mono text-[11.5px] text-[#86948F]">
+          {@empty}
+        </p>
+      </div>
+    </div>
+    """
+  end
 
   @impl true
   def render(assigns) do
@@ -80,30 +122,12 @@ defmodule SkillsWeb.Live.Index do
           see <span class="text-[#E6ECE9]">sapo skills help</span>.
         </p>
 
-        <div class="rounded-[4px] border border-[#242D31] divide-y divide-[#242D31] overflow-hidden">
-          <div :for={skill <- @skills} class="flex items-center gap-3 px-3 py-2.5 bg-[#151B1E] font-mono text-[12px]">
-            <span
-              class="shrink-0 px-1.5 py-0.5 rounded-[3px] text-[10px] uppercase tracking-wide border"
-              style={"color: #{kind_color(skill.kind)}; border-color: #{kind_color(skill.kind)}"}
-            >{kind_label(skill.kind)}</span>
-            <button
-              phx-click="view"
-              phx-value-id={skill.id}
-              class="flex-1 min-w-0 text-left truncate text-[#E6ECE9] hover:text-[#7FB069]"
-              title={skill.name}
-            >{skill.name}</button>
-            <span :if={skill.marketplace} class="text-[#86948F] shrink-0">@{skill.marketplace}</span>
-            <button
-              phx-click="request_delete"
-              phx-value-id={skill.id}
-              class="shrink-0 text-[#86948F] hover:text-[#E05C5C]"
-            >✕</button>
-          </div>
+        <p :if={@skills == []} class="px-3 py-6 text-center font-mono text-[12px] text-[#86948F] rounded-[4px] border border-[#242D31]">
+          No skills tracked yet.
+        </p>
 
-          <p :if={@skills == []} class="px-3 py-6 text-center font-mono text-[12px] text-[#86948F]">
-            No skills tracked yet.
-          </p>
-        </div>
+        <.skill_section :if={@skills != []} title="Marketplace" skills={@marketplace_skills} empty="No marketplace skills." />
+        <.skill_section :if={@skills != []} title="Custom" skills={@custom_skills} empty="No custom skills." />
       </main>
     </div>
 
