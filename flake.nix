@@ -261,6 +261,15 @@
           cliFragment = true;
           jsHooks = true;
         };
+        skills = {
+          name = "skills";
+          app = "skills";
+          src = ./modules/skills;
+          elixirModule = "Skills.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = false;
+        };
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self; };

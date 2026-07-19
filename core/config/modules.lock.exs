@@ -10,5 +10,6 @@
   {:storage, "../../modules/storage"},
   {:reminders, "../../modules/reminders"},
   {:projects, "../../modules/projects"},
-  {:recipes, "../../modules/recipes"}
+  {:recipes, "../../modules/recipes"},
+  {:skills, "../../modules/skills"}
 ]

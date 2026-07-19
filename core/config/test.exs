@@ -43,3 +43,12 @@ config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
 config :sapo_core, prefs_overlay: Path.expand("../tmp/prefs_overlay_test.json", __DIR__)
+
+# skills module: isolate ~/.claude equivalent from the real box's HOME
+# (its boot reconcile task manages a real symlink + reads/writes real
+# `claude` CLI state otherwise), and never shell out to the real `claude`
+# binary during tests (no network, deterministic, no mutation of real
+# installed plugins).
+config :skills,
+  claude_home: Path.expand("../tmp/claude_home_test", __DIR__),
+  enable_claude_cli: false

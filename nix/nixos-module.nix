@@ -221,12 +221,17 @@ in
             theme = "dark";
             skipDangerousModePermissionPrompt = true;
             agentPushNotifEnabled = true;
-            enabledPlugins."frontend-design@claude-plugins-official" = true;
           };
           description = ''
             Fully overwrites `~/.claude/settings.json` for the sapohub user
             via activation script, so it's rebuilt from these values (rather
             than drifting as ad hoc runtime state) on every switch.
+
+            Deliberately has no `enabledPlugins` default: skill/plugin
+            enablement is owned by the `skills` utility module once it's
+            enabled (its own DB drives what's installed/enabled, reasserted
+            at every app boot — see `modules/skills`). Set `enabledPlugins`
+            here yourself only if you're running without that module.
           '';
         };
 
