@@ -67,7 +67,9 @@ defmodule SapoCore.AiContext do
       wiring needed.
     - Never trigger a deploy without explicit user instruction — it rebuilds
       and restarts the live service. Always ensure changes are committed AND
-      pushed first (deploys pull from git, not the local working copy).
+      pushed first (deploys pull from git, not the local working copy). Once
+      the user has told you to deploy, that IS the explicit instruction —
+      don't ask for confirmation again for that same deploy.
     - Plain `sapohub-deploy` (no flags) doesn't need GITHUB_TOKEN. That
       secret is only required for `--sync-prefs` (what the Settings page's
       Deploy button runs), which also pushes a UI-prefs commit back to the
