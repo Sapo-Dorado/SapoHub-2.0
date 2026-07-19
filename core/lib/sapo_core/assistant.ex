@@ -42,6 +42,13 @@ defmodule SapoCore.Assistant do
     GET /api/claude-context. When you finish a task or need user input,
     call `sapo notify "<short message>"` — suppression is handled
     automatically via SAPO_SESSION_ID.
+
+    For `sapo` CLI usage, run `sapo help`, `sapo <resource> help`, or
+    `sapo <resource>` with no action — these all print usage. `--help`/`-h`
+    placed after an action verb (e.g. `sapo recipes create --help`) is NOT
+    recognized as a help flag; it's consumed as a positional argument and
+    will create/act on a real record named "--help". Always ask for help
+    before the action, never after it.
     """
     |> String.trim()
   end
