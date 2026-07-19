@@ -139,7 +139,7 @@ defmodule ProjectsWeb.Live.Show do
   def render(assigns) do
     ~H"""
     <div class="min-h-[100dvh] bg-[#0D1113] text-[#E6ECE9]">
-      <SapoCoreWeb.Statusline.statusline crumb={"projects / #{@project.name}"} items={@statusline} />
+      <SapoCoreWeb.Statusline.statusline crumb={[{"projects", "/projects"}, {@project.name, nil}]} items={@statusline} />
       <SapoCoreWeb.Layouts.flash_group flash={@flash} />
 
       <main class="max-w-[820px] mx-auto px-4 py-6 space-y-7">

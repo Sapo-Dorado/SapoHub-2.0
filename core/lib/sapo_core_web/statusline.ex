@@ -9,6 +9,11 @@ defmodule SapoCoreWeb.Statusline do
     tick, and keeps the `@statusline` assign current.
   * `<.statusline crumb="settings" />` — the bar itself: brand/home link,
     optional crumb, live items, clock, settings gear.
+
+  `crumb` accepts either a plain string, or a list of `{label, navigate_to}`
+  segments (pass `nil` for the current, non-linked segment) to render
+  intermediate segments as links back up the hierarchy, e.g.
+  `crumb={[{"projects", "/projects"}, {@project.name, nil}]}`.
   """
 
   use Phoenix.Component
@@ -64,16 +69,21 @@ defmodule SapoCoreWeb.Statusline do
 
   # ── Component ──────────────────────────────────────────────────────────────
 
-  attr :crumb, :string, default: nil
+  attr :crumb, :any, default: nil
   attr :items, :list, default: []
   attr :right, :string, default: nil
 
   def statusline(assigns) do
+    assigns = assign(assigns, :crumb_segments, crumb_segments(assigns.crumb))
+
     ~H"""
     <nav class="flex items-center h-11 px-4 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs overflow-x-auto whitespace-nowrap shrink-0 [scrollbar-width:none]">
       <.link navigate="/" class="text-[#7FB069] font-semibold">sapohub</.link>
-      <span :if={@crumb} class="text-[#86948F] px-2">/</span>
-      <span :if={@crumb} class="text-[#E6ECE9]">{@crumb}</span>
+      <%= for {label, to} <- @crumb_segments do %>
+        <span class="text-[#86948F] px-2">/</span>
+        <.link :if={to} navigate={to} class="text-[#86948F] hover:text-[#E6ECE9]">{label}</.link>
+        <span :if={!to} class="text-[#E6ECE9]">{label}</span>
+      <% end %>
 
       <span
         :for={item <- @items}
@@ -97,6 +107,10 @@ defmodule SapoCoreWeb.Statusline do
     </nav>
     """
   end
+
+  defp crumb_segments(nil), do: []
+  defp crumb_segments(crumb) when is_binary(crumb), do: [{crumb, nil}]
+  defp crumb_segments(segments) when is_list(segments), do: segments
 
   defp level_class(:ok), do: "text-[#7FB069]"
   defp level_class(:warn), do: "text-[#E0A458]"
