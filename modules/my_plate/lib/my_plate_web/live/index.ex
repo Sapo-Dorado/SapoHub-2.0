@@ -337,7 +337,7 @@ defmodule MyPlateWeb.Live.Index do
   defp due_date_class(due_date) do
     if Date.compare(due_date, MyPlate.today()) != :gt,
       do: "text-[#E0A458]",
-      else: "text-[#86948F] hover:text-[#E6ECE9]"
+      else: "text-[#86948F] group-hover/date:text-[#E6ECE9]"
   end
 
   defp board_name(boards, board_id) do
@@ -578,30 +578,41 @@ defmodule MyPlateWeb.Live.Index do
                   </span>
                 </div>
                 <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]" title="Recurring task">↻</span>
-                <form phx-change="save_due_date" class="shrink-0">
+                <form phx-change="save_due_date" class="group/date relative shrink-0">
                   <input type="hidden" name="task_id" value={task.id} />
-                  <input
-                    type="date"
-                    name="due_date"
-                    id={"due-date-input-#{task.id}"}
-                    value={task.due_date}
-                    class="sr-only"
-                  />
                   <button
                     type="button"
-                    id={"due-date-btn-#{task.id}"}
-                    phx-hook="DueDatePicker"
-                    data-input-id={"due-date-input-#{task.id}"}
+                    tabindex="-1"
+                    aria-hidden="true"
                     class={[
-                      "font-mono text-[11.5px] whitespace-nowrap cursor-pointer transition-opacity",
+                      "font-mono text-[11.5px] whitespace-nowrap transition-opacity pointer-events-none",
                       if(task.due_date,
                         do: due_date_class(task.due_date),
-                        else: "text-[#86948F] opacity-40 group-hover:opacity-100 hover:text-[#E6ECE9]"
+                        else: "text-[#86948F] opacity-40 group-hover:opacity-100 group-hover/date:text-[#E6ECE9]"
                       )
                     ]}
                   >
                     {task.due_date || "set due date"}
                   </button>
+                  <%!--
+                    A real, normally-sized <input type="date"> sitting on top of the
+                    label button (opacity-0, not sr-only) rather than a zero-area
+                    hidden input opened via a sibling button's showPicker()/focus()
+                    call. Mobile Safari/Chrome refuse to open the native date/time
+                    picker on an input that has no visible rendered area (which is
+                    what sr-only's clip-path collapses it to) even when
+                    showPicker()/focus() is called from a genuine tap — the tap has
+                    to land on the control itself. Overlaying it keeps the custom
+                    label look while making the tap target the actual input.
+                  --%>
+                  <input
+                    type="date"
+                    name="due_date"
+                    id={"due-date-input-#{task.id}"}
+                    value={task.due_date}
+                    aria-label="Due date"
+                    class="absolute inset-0 z-10 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
+                  />
                 </form>
                 <button
                   phx-click="confirm_delete_task"
