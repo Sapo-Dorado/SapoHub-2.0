@@ -299,7 +299,7 @@ defmodule Recipes do
   end
 
   def delete_contribution(id) when is_binary(id) do
-    id |> Repo.get!(ShoppingListContribution) |> delete_contribution()
+    ShoppingListContribution |> Repo.get!(id) |> delete_contribution()
   end
 
   @doc "Deletes every checked item (and its contributions, via cascade). Returns the count removed."

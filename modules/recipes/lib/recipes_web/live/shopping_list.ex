@@ -12,7 +12,7 @@ defmodule RecipesWeb.Live.ShoppingList do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: SapoKit.PubSub.subscribe("recipes:shopping_list")
-    {:ok, load(socket)}
+    {:ok, socket |> assign(editing_notes: MapSet.new()) |> load()}
   end
 
   @impl true
@@ -26,6 +26,14 @@ defmodule RecipesWeb.Live.ShoppingList do
     item = Recipes.get_shopping_list_item!(id)
     Recipes.update_shopping_list_item(item, %{"note" => note})
     {:noreply, load(socket)}
+  end
+
+  def handle_event("edit_note", %{"id" => id}, socket) do
+    {:noreply, update(socket, :editing_notes, &MapSet.put(&1, id))}
+  end
+
+  def handle_event("stop_edit_note", %{"id" => id}, socket) do
+    {:noreply, update(socket, :editing_notes, &MapSet.delete(&1, id))}
   end
 
   def handle_event("delete_item", %{"id" => id}, socket) do
@@ -90,7 +98,7 @@ defmodule RecipesWeb.Live.ShoppingList do
           </div>
 
           <ul class="rounded-[4px] border border-[#242D31] divide-y divide-[#242D31] bg-[#151B1E]">
-            <.item_row :for={item <- @open} item={item} />
+            <.item_row :for={item <- @open} item={item} editing_notes={@editing_notes} />
           </ul>
         </section>
 
@@ -108,7 +116,7 @@ defmodule RecipesWeb.Live.ShoppingList do
           </div>
 
           <ul class="rounded-[4px] border border-[#242D31] divide-y divide-[#242D31] bg-[#151B1E] opacity-60">
-            <.item_row :for={item <- @checked} item={item} />
+            <.item_row :for={item <- @checked} item={item} editing_notes={@editing_notes} />
           </ul>
         </section>
       </main>
@@ -117,8 +125,13 @@ defmodule RecipesWeb.Live.ShoppingList do
   end
 
   attr :item, :map, required: true
+  attr :editing_notes, :any, required: true
 
   defp item_row(assigns) do
+    editing = MapSet.member?(assigns.editing_notes, assigns.item.id)
+    has_note = assigns.item.note not in [nil, ""]
+    assigns = assign(assigns, editing: editing, has_note: has_note)
+
     ~H"""
     <li class="flex items-start gap-3 px-3 py-3">
       <button
@@ -138,7 +151,7 @@ defmodule RecipesWeb.Live.ShoppingList do
           {@item.ingredient.name}
         </span>
 
-        <form :if={!@item.checked} phx-change="update_note" class="mt-0.5">
+        <form :if={@editing} phx-change="update_note" class="mt-0.5">
           <input type="hidden" name="item_id" value={@item.id} />
           <input
             type="text"
@@ -146,9 +159,16 @@ defmodule RecipesWeb.Live.ShoppingList do
             value={@item.note}
             placeholder="add a note…"
             autocomplete="off"
+            autofocus
+            phx-blur="stop_edit_note"
+            phx-value-id={@item.id}
             class="w-full bg-transparent border-none p-0 font-mono text-[11px] text-[#86948F] placeholder-[#4A5458] italic focus:outline-none focus:text-[#E6ECE9]"
           />
         </form>
+
+        <p :if={!@editing and @has_note} class="mt-0.5 font-mono text-[11px] text-[#86948F] italic truncate">
+          {@item.note}
+        </p>
 
         <div :if={@item.contributions != []} class="mt-1.5 flex flex-col gap-1">
           <div :for={c <- @item.contributions} class="flex items-center gap-1.5 font-mono text-[10.5px] text-[#86948F]">
@@ -166,14 +186,26 @@ defmodule RecipesWeb.Live.ShoppingList do
         </div>
       </div>
 
-      <button
-        phx-click="delete_item"
-        phx-value-id={@item.id}
-        aria-label="Remove from list"
-        class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
-      >
-        ×
-      </button>
+      <div class="flex flex-col items-center gap-1.5">
+        <button
+          phx-click="delete_item"
+          phx-value-id={@item.id}
+          aria-label="Remove from list"
+          class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
+        >
+          ×
+        </button>
+
+        <button
+          :if={!@item.checked}
+          phx-click="edit_note"
+          phx-value-id={@item.id}
+          aria-label={if @has_note, do: "Edit note", else: "Add a note"}
+          class="font-mono text-[11px] text-[#4A5458] hover:text-[#E6ECE9] cursor-pointer"
+        >
+          ✎
+        </button>
+      </div>
     </li>
     """
   end
