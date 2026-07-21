@@ -104,8 +104,7 @@ defmodule MyPlate.Module do
   def config_schema do
     [
       tile_style: [type: {:in, [:standard, :wide, :accent]}, default: :standard],
-      default_remind_time: [type: :string, default: "09:00"],
-      timezone: [type: :string, default: "Etc/UTC"]
+      default_remind_time: [type: :string, default: "09:00"]
     ]
   end
 end

@@ -14,15 +14,10 @@ defmodule MyPlate do
   alias MyPlate.Task
   alias SapoKit.Repo
 
-  @doc "Today in the configured timezone (falls back to UTC)."
+  @doc "Today in the instance's configured display timezone (falls back to UTC)."
   def today(now \\ DateTime.utc_now()) do
-    case DateTime.shift_zone(now, timezone()) do
-      {:ok, local} -> DateTime.to_date(local)
-      {:error, _} -> DateTime.to_date(now)
-    end
+    now |> SapoKit.Time.local() |> DateTime.to_date()
   end
-
-  defp timezone, do: SapoKit.ModuleConfig.get(:my_plate, :timezone) || "Etc/UTC"
 
   defp default_remind_time do
     case SapoKit.ModuleConfig.get(:my_plate, :default_remind_time) do
@@ -330,7 +325,7 @@ defmodule MyPlate do
   end
 
   defp remind_at(%Date{} = due_date) do
-    case DateTime.new(due_date, default_remind_time(), timezone()) do
+    case DateTime.new(due_date, default_remind_time(), SapoKit.Time.zone_name()) do
       {:ok, dt} -> DateTime.shift_zone!(dt, "Etc/UTC")
       {:error, _} -> DateTime.new!(due_date, default_remind_time(), "Etc/UTC")
     end

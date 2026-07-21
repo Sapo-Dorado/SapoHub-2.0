@@ -11,6 +11,8 @@ defmodule MyPlateWeb.Live.Index do
   """
   use SapoKit.Web, :live_view
 
+  require Logger
+
   alias MyPlate.Board
   alias MyPlate.RecurringTask
 
@@ -126,15 +128,17 @@ defmodule MyPlateWeb.Live.Index do
     {:noreply, load(socket)}
   end
 
-  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date}, socket) do
+  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date} = params, socket) do
+    Logger.warning("TEMP DEBUG save_due_date params=#{inspect(params)}")
     due_date = if due_date == "", do: nil, else: due_date
-    {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
+    {:ok, updated} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
+    Logger.warning("TEMP DEBUG save_due_date result due_date=#{inspect(updated.due_date)}")
     {:noreply, load(socket)}
   end
 
-  def handle_event("clear_due_date", %{"id" => id}, socket) do
-    {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => nil})
-    {:noreply, load(socket)}
+  def handle_event("due_date_debug", %{"type" => type, "value" => value}, socket) do
+    Logger.warning("TEMP DEBUG client #{type} event, input.value=#{inspect(value)}")
+    {:noreply, socket}
   end
 
   # ── Board scope ──────────────────────────────────────────────────────────
@@ -625,22 +629,14 @@ defmodule MyPlateWeb.Live.Index do
                     <input
                       type="date"
                       name="due_date"
+                      id={"due-date-input-#{task.id}"}
                       value={task.due_date}
                       aria-label="Due date"
                       onclick="this.showPicker && this.showPicker()"
+                      phx-hook="DueDateDebug"
                       class="keep-native-date-appearance absolute inset-0 w-full h-full opacity-[0.01] cursor-pointer [color-scheme:dark]"
                     />
                   </div>
-                  <button
-                    :if={task.due_date}
-                    type="button"
-                    phx-click="clear_due_date"
-                    phx-value-id={task.id}
-                    aria-label="Clear due date"
-                    class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
-                  >
-                    ×
-                  </button>
                 </form>
                 <button
                   phx-click="confirm_delete_task"

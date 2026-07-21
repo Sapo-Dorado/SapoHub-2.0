@@ -12,6 +12,10 @@ defmodule SapoKit.Time do
   @spec local(DateTime.t()) :: DateTime.t()
   def local(%DateTime{} = dt), do: impl().local(dt)
 
+  @doc "Configured IANA display timezone (e.g. \"America/Los_Angeles\"), for building a zoned DateTime directly rather than shifting an existing one."
+  @spec zone_name() :: String.t()
+  def zone_name, do: impl().display_timezone()
+
   @spec format(DateTime.t(), String.t()) :: String.t()
   def format(%DateTime{} = dt, fmt), do: impl().format(dt, fmt)
 

@@ -20,6 +20,21 @@ export default {
     },
   },
 
+  // TEMP diagnostic — mounted on the due-date input. Logs every raw
+  // input/change DOM event straight to the server (via a no-op
+  // "due_date_debug" event) so we can see what the browser actually fires
+  // when the native picker's Reset is pressed, independent of whether it
+  // ends up reaching save_due_date's phx-change binding at all.
+  DueDateDebug: {
+    mounted() {
+      const log = (e) => {
+        this.pushEvent("due_date_debug", { type: e.type, value: this.el.value });
+      };
+      this.el.addEventListener("input", log);
+      this.el.addEventListener("change", log);
+    },
+  },
+
   // Mounted on each priority section's task list. `data-group` is the
   // priority name ("high"/"medium"/"low"); dragging a task into a
   // different section's list re-parents it there. On drop, pushes
