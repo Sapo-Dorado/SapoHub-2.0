@@ -595,15 +595,27 @@ defmodule MyPlateWeb.Live.Index do
                     {task.due_date || "set due date"}
                   </button>
                   <%!--
-                    A real, normally-sized <input type="date"> sitting on top of the
-                    label button (opacity-0, not sr-only) rather than a zero-area
-                    hidden input opened via a sibling button's showPicker()/focus()
-                    call. Mobile Safari/Chrome refuse to open the native date/time
-                    picker on an input that has no visible rendered area (which is
-                    what sr-only's clip-path collapses it to) even when
+                    A real <input type="date"> sitting on top of the label button
+                    (opacity-0, not sr-only) rather than a zero-area hidden input
+                    opened via a sibling button's showPicker()/focus() call.
+                    Mobile Safari/Chrome refuse to open the native date/time picker
+                    on an input that has no visible rendered area (which is what
+                    sr-only's clip-path collapses it to) even when
                     showPicker()/focus() is called from a genuine tap — the tap has
                     to land on the control itself. Overlaying it keeps the custom
                     label look while making the tap target the actual input.
+
+                    Anchored to the right (same edge the label renders at) but
+                    given a fixed width well past the label's own short text,
+                    rather than `w-full` matching the button's rendered box:
+                    app.css applies `overflow: hidden` to every
+                    input[type=date] (documented there) so its native segments +
+                    clear-icon + calendar-icon clip at the INPUT's own border
+                    box, not the label's. A width tied to "jul 20" / "set due
+                    date" runs well under the browser's natural minimum for that
+                    internal layout, clipping the native clear-icon out of the
+                    tappable area entirely — invisible either way, so the extra
+                    width costs nothing visually.
                   --%>
                   <input
                     type="date"
@@ -611,7 +623,8 @@ defmodule MyPlateWeb.Live.Index do
                     id={"due-date-input-#{task.id}"}
                     value={task.due_date}
                     aria-label="Due date"
-                    class="absolute inset-0 z-10 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
+                    phx-hook="DueDateGuard"
+                    class="absolute inset-y-0 right-0 z-10 w-32 opacity-0 cursor-pointer [color-scheme:dark]"
                   />
                 </form>
                 <button
