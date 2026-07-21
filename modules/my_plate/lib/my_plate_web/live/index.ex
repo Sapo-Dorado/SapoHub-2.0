@@ -11,8 +11,6 @@ defmodule MyPlateWeb.Live.Index do
   """
   use SapoKit.Web, :live_view
 
-  require Logger
-
   alias MyPlate.Board
   alias MyPlate.RecurringTask
 
@@ -77,8 +75,6 @@ defmodule MyPlateWeb.Live.Index do
   end
 
   def handle_event("create_task", %{"task" => params}, socket) do
-    Logger.warning("TEMP DEBUG create_task params=#{inspect(params)}")
-
     params =
       params
       |> Map.put_new("due_date", nil)
@@ -130,17 +126,10 @@ defmodule MyPlateWeb.Live.Index do
     {:noreply, load(socket)}
   end
 
-  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date} = params, socket) do
-    Logger.warning("TEMP DEBUG save_due_date params=#{inspect(params)}")
+  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date}, socket) do
     due_date = if due_date == "", do: nil, else: due_date
-    {:ok, updated} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
-    Logger.warning("TEMP DEBUG save_due_date result due_date=#{inspect(updated.due_date)}")
+    {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
     {:noreply, load(socket)}
-  end
-
-  def handle_event("due_date_debug", %{"type" => type, "value" => value}, socket) do
-    Logger.warning("TEMP DEBUG client #{type} event, input.value=#{inspect(value)}")
-    {:noreply, socket}
   end
 
   # ── Board scope ──────────────────────────────────────────────────────────
@@ -590,28 +579,24 @@ defmodule MyPlateWeb.Live.Index do
                 </div>
                 <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]" title="Recurring task">↻</span>
                 <%!--
-                  Ported from sapohub-v1's MyPlateLive (see
-                  lib/sapo_hub_web/live/my_plate_live.ex) — confirmed by
-                  direct user testing to have working native Reset there,
-                  unlike earlier attempts at this control in this repo. A
-                  plain <span> carries the visible label, fully decoupled
-                  from the native input's own rendering (never at the mercy
-                  of `placeholder` not being supported on type=date, or of
-                  whatever iOS falls back to showing). The real
-                  <input type="date"> sits on top as a normal `opacity-0`
-                  overlay, exactly matching v1's — an earlier attempt here
-                  used `opacity-[0.01]` on a theory that true zero-opacity
-                  broke Reset sync, but v1 uses plain `opacity-0` and works,
-                  so that wasn't it.
+                  Structurally ported from sapohub-v1's MyPlateLive (see
+                  lib/sapo_hub_web/live/my_plate_live.ex): a plain <span>
+                  carries the visible label, fully decoupled from the
+                  native input's own rendering (never at the mercy of
+                  `placeholder` not being supported on type=date, or of
+                  whatever iOS falls back to showing for an unstyled one).
+                  The real <input type="date"> sits on top as a plain
+                  `opacity-0` overlay, matching v1's exactly.
 
-                  `.native-date-input` (see app.css) excludes this specific
-                  input from ALL THREE of this repo's global date/time
-                  input CSS overrides (shadow-part min-width zeroing,
-                  overflow:hidden, and iOS's appearance:none) — v1's
-                  equivalent control has none of them applied at all. An
-                  earlier fix here only excluded the appearance:none rule
-                  and left the other two in place, which didn't restore
-                  Reset either; excluding all three matches v1 exactly.
+                  Native Reset does not clear this field to empty — verified
+                  directly (temporary debug logging + a live v1 instance
+                  tested side by side) that v1's identical invisible-overlay
+                  control has the exact same limitation: Reset always
+                  resubmits today's date, never empty, on both versions.
+                  Not a regression or something fixable here — it's how this
+                  native control behaves for an invisible target. Clearing a
+                  due date needs its own explicit affordance if that's ever
+                  wanted again (removed previously per design feedback).
                 --%>
                 <form phx-change="save_due_date" class="shrink-0 whitespace-nowrap flex items-center gap-1">
                   <input type="hidden" name="task_id" value={task.id} />
@@ -628,12 +613,10 @@ defmodule MyPlateWeb.Live.Index do
                     <input
                       type="date"
                       name="due_date"
-                      id={"due-date-input-#{task.id}"}
                       value={task.due_date}
                       aria-label="Due date"
                       onclick="this.showPicker && this.showPicker()"
-                      phx-hook="DueDateDebug"
-                      class="native-date-input absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
+                      class="absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
                     />
                   </div>
                 </form>
@@ -751,8 +734,6 @@ defmodule MyPlateWeb.Live.Index do
             <input
               type="date"
               name="task[due_date]"
-              id="add-task-due-date"
-              phx-hook="DueDateDebug"
               class="w-full min-w-0 box-border pl-3 pr-4 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] focus:border-[#7FB069] focus:outline-none [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:mr-0"
             />
           </div>
