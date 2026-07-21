@@ -200,10 +200,20 @@ input[type="time"] {
    https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout)
    — desktop Chrome/Safari already render this correctly as confirmed
    by pixel-exact measurements and shouldn't have their calendar/clock
-   icon affordance removed for no reason. */
+   icon affordance removed for no reason.
+
+   Excludes `.keep-native-date-appearance`: my_plate's inline due-date
+   control (see its index.ex) is an invisible, full-size overlay sitting
+   on top of its own separately-rendered label — it never needs the
+   width fix this rule exists for (nothing about it is visibly
+   rendered). sapohub-v1's equivalent control (confirmed still working,
+   including native Reset) never had this override applied to it —
+   dropping an element out of Safari's native rendering path here is
+   the leading suspect for why that native picker's Reset/clear
+   affordance stopped working once this repo's version gained it. */
 @supports (-webkit-touch-callout: none) {
-  input[type="date"],
-  input[type="time"] {
+  input[type="date"]:not(.keep-native-date-appearance),
+  input[type="time"]:not(.keep-native-date-appearance) {
     -webkit-appearance: none;
     appearance: none;
   }

@@ -616,7 +616,7 @@ defmodule MyPlateWeb.Live.Index do
                       value={task.due_date}
                       aria-label="Due date"
                       onclick="this.showPicker && this.showPicker()"
-                      class="absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
+                      class="keep-native-date-appearance absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
                     />
                   </div>
                   <button
