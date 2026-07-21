@@ -11,8 +11,6 @@ defmodule MyPlateWeb.Live.Index do
   """
   use SapoKit.Web, :live_view
 
-  require Logger
-
   alias MyPlate.Board
   alias MyPlate.RecurringTask
 
@@ -128,16 +126,13 @@ defmodule MyPlateWeb.Live.Index do
     {:noreply, load(socket)}
   end
 
-  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date} = params, socket) do
-    Logger.warning("TEMP DEBUG save_due_date params=#{inspect(params)}")
+  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date}, socket) do
     due_date = if due_date == "", do: nil, else: due_date
-    {:ok, updated} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
-    Logger.warning("TEMP DEBUG save_due_date result due_date=#{inspect(updated.due_date)}")
+    {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
     {:noreply, load(socket)}
   end
 
   def handle_event("clear_due_date", %{"id" => id}, socket) do
-    Logger.warning("TEMP DEBUG clear_due_date id=#{inspect(id)}")
     {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => nil})
     {:noreply, load(socket)}
   end
@@ -589,45 +584,41 @@ defmodule MyPlateWeb.Live.Index do
                 </div>
                 <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]" title="Recurring task">↻</span>
                 <%!--
-                  The due-date control IS the native <input type="date"> — no
-                  separate label button, no hidden/overlay input, no JS.
-                  Earlier versions kept those two elements apart to get custom
-                  "set due date" wording and custom text color, which forced a
-                  JS-driven showPicker()/focus() trigger (broken on mobile, see
-                  git history) and later an invisible overlay. Styling the
-                  real input directly gets the custom color without any of
-                  that: single tap opens it on every platform since it's a
-                  genuine, normal-sized, always-native control.
-
-                  Left as the browser's own plain rendering rather than
-                  hiding the native mm/dd/yyyy segments to paint a custom
-                  "set due date" overlay in their place (tried previously —
-                  didn't render reliably on real mobile Safari, worse than
-                  the plain native placeholder it replaced).
-
-                  A separate, explicit × clears the date via its own
-                  "clear_due_date" event instead of relying on the picker's
-                  own reset/cancel affordance — mobile date pickers don't
-                  reliably offer one (iOS's wheel picker has no clear
-                  gesture at all, only Cancel, which reverts rather than
-                  clears), so this is the only way clearing works everywhere.
+                  Ported from sapohub-v1's MyPlateLive (confirmed working
+                  there, see lib/sapo_hub_web/live/my_plate_live.ex): a plain
+                  <span> carries the visible label — fully decoupled from
+                  the native input's own rendering, so it's never at the
+                  mercy of `-webkit-appearance:none` (see app.css) making
+                  iOS fall back to unpredictable text, or `placeholder` not
+                  being supported on type=date at all. The real
+                  <input type="date"> sits on top, sized to the FULL padded
+                  box (not shrunk to the label's own text width like earlier
+                  attempts here) so its native segments/clear-icon/reset
+                  affordance have room and aren't clipped — that clipping,
+                  not any inherent platform limitation, is why native
+                  clear/reset appeared broken in prior attempts.
                 --%>
                 <form phx-change="save_due_date" class="shrink-0 whitespace-nowrap flex items-center gap-1">
                   <input type="hidden" name="task_id" value={task.id} />
-                  <input
-                    type="date"
-                    name="due_date"
-                    id={"due-date-input-#{task.id}-#{task.due_date}"}
-                    value={task.due_date}
-                    aria-label="Due date"
-                    class={[
-                      "font-mono text-[11.5px] bg-transparent border-none p-0 cursor-pointer focus:outline-none [color-scheme:dark]",
-                      if(task.due_date,
-                        do: due_date_class(task.due_date),
-                        else: "text-[#86948F] opacity-40 group-hover:opacity-100"
-                      )
-                    ]}
-                  />
+                  <div class={[
+                    "relative inline-flex items-center rounded-[3px] px-1.5 py-[3px] font-mono text-[11.5px] cursor-pointer",
+                    if(task.due_date,
+                      do: due_date_class(task.due_date),
+                      else: "text-[#86948F] opacity-40 group-hover:opacity-100"
+                    )
+                  ]}>
+                    <span class="pointer-events-none select-none whitespace-nowrap">
+                      {task.due_date || "set due date"}
+                    </span>
+                    <input
+                      type="date"
+                      name="due_date"
+                      value={task.due_date}
+                      aria-label="Due date"
+                      onclick="this.showPicker && this.showPicker()"
+                      class="absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
+                    />
+                  </div>
                   <button
                     :if={task.due_date}
                     type="button"
