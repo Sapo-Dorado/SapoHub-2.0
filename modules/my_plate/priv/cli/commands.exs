@@ -4,6 +4,7 @@
     name: "tasks",
     help:
       "list [--priority high|medium|low] | show <id> | create <title> [--priority <p>] [--due YYYY-MM-DD] |
+              edit <id> [--title <t>] [--priority <p>] [--due YYYY-MM-DD|none] |
               complete <id> | uncomplete <id> | delete <id>",
     actions: [
       %{action: "list", verb: :list, path: "/tasks",
@@ -13,6 +14,12 @@
         params: [
           %{key: :priority, flag: "--priority", default: "medium"},
           %{key: :due_date, flag: "--due"}
+        ]},
+      %{action: "edit", verb: :update, path: "/tasks/:id",
+        params: [
+          %{key: :title, flag: "--title"},
+          %{key: :priority, flag: "--priority"},
+          %{key: :due_date, flag: "--due", clear_value: "none"}
         ]},
       %{action: "complete", verb: :create, path: "/tasks/:id/complete"},
       %{action: "uncomplete", verb: :create, path: "/tasks/:id/uncomplete"},

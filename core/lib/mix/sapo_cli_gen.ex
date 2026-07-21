@@ -50,17 +50,23 @@ defmodule SapoCliGen do
     * `:upload` — multipart `POST <path>` with a required file positional
       (`field:` sets the form field name, default `"file"`)
 
-  `params` entries: `%{key:, flag:, default:, required:, type:, env:}` —
-  `type: :integer` coerces via jq's `tonumber`; `type: :json` passes the
-  value through raw via `--argjson` instead of `--arg` (the flag's value
-  must be valid JSON — pair it with `default: "{}"` or similar so it's
-  always well-formed); `required: true` dies with a usage message if the
-  flag is missing; `default:` is used when the flag is omitted (and makes
-  the field always present in the body). A param with `env:` instead of
-  `flag:` is sourced from an environment variable (e.g. `%{key: :session_id,
-  env: "SAPO_SESSION_ID"}`) rather than a CLI flag — it's read straight from
-  the environment, omitted from generated usage/flag parsing, and included
-  in the request body only if the env var is non-empty.
+  `params` entries: `%{key:, flag:, default:, required:, type:, env:,
+  clear_value:}` — `type: :integer` coerces via jq's `tonumber`; `type:
+  :json` passes the value through raw via `--argjson` instead of `--arg`
+  (the flag's value must be valid JSON — pair it with `default: "{}"` or
+  similar so it's always well-formed); `required: true` dies with a usage
+  message if the flag is missing; `default:` is used when the flag is
+  omitted (and makes the field always present in the body). A param with
+  `env:` instead of `flag:` is sourced from an environment variable (e.g.
+  `%{key: :session_id, env: "SAPO_SESSION_ID"}`) rather than a CLI flag —
+  it's read straight from the environment, omitted from generated
+  usage/flag parsing, and included in the request body only if the env var
+  is non-empty. `clear_value: "<word>"` on an optional (no `default`) param
+  lets a `:create`/`:update` action explicitly null out a field: passing
+  the flag with that exact value (e.g. `--due none`) sends `{key: null}`
+  in the body instead of omitting the field, while leaving the flag off
+  entirely still omits it (so unrelated fields on an `:update` are left
+  untouched).
 
   ## Escape hatch
 
@@ -311,7 +317,14 @@ defmodule SapoCliGen do
       params
       |> Enum.reject(&Map.has_key?(&1, :default))
       |> Enum.map_join("", fn p ->
-        " + (if $#{p.key} != \"\" then {#{p.key}: #{jq_value(p)}} else {} end)"
+        case Map.get(p, :clear_value) do
+          nil ->
+            " + (if $#{p.key} != \"\" then {#{p.key}: #{jq_value(p)}} else {} end)"
+
+          clear ->
+            " + (if $#{p.key} == \"#{clear}\" then {#{p.key}: null} " <>
+              "elif $#{p.key} != \"\" then {#{p.key}: #{jq_value(p)}} else {} end)"
+        end
       end)
 
     base = if required_fields == "", do: "{}", else: "{#{required_fields}#{always_present}}"
