@@ -148,20 +148,23 @@ html, body {
    itself a flex item carrying its own default `min-width: auto`, which
    iOS's layout honors even once the wrapper's own min-width is zeroed.
    Zero every individual segment pseudo-element too so none of them can
-   hold the control open past the input's actual box. */
-input[type="date"]::-webkit-datetime-edit,
-input[type="date"]::-webkit-datetime-edit-fields-wrapper,
-input[type="date"]::-webkit-datetime-edit-text,
-input[type="date"]::-webkit-datetime-edit-month-field,
-input[type="date"]::-webkit-datetime-edit-day-field,
-input[type="date"]::-webkit-datetime-edit-year-field,
-input[type="time"]::-webkit-datetime-edit,
-input[type="time"]::-webkit-datetime-edit-fields-wrapper,
-input[type="time"]::-webkit-datetime-edit-text,
-input[type="time"]::-webkit-datetime-edit-hour-field,
-input[type="time"]::-webkit-datetime-edit-minute-field,
-input[type="time"]::-webkit-datetime-edit-second-field,
-input[type="time"]::-webkit-datetime-edit-ampm-field {
+   hold the control open past the input's actual box.
+
+   Excludes `.native-date-input` (see below — same reasoning for all
+   three rules in this file, kept together here rather than repeated). */
+input[type="date"]:not(.native-date-input)::-webkit-datetime-edit,
+input[type="date"]:not(.native-date-input)::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]:not(.native-date-input)::-webkit-datetime-edit-text,
+input[type="date"]:not(.native-date-input)::-webkit-datetime-edit-month-field,
+input[type="date"]:not(.native-date-input)::-webkit-datetime-edit-day-field,
+input[type="date"]:not(.native-date-input)::-webkit-datetime-edit-year-field,
+input[type="time"]:not(.native-date-input)::-webkit-datetime-edit,
+input[type="time"]:not(.native-date-input)::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]:not(.native-date-input)::-webkit-datetime-edit-text,
+input[type="time"]:not(.native-date-input)::-webkit-datetime-edit-hour-field,
+input[type="time"]:not(.native-date-input)::-webkit-datetime-edit-minute-field,
+input[type="time"]:not(.native-date-input)::-webkit-datetime-edit-second-field,
+input[type="time"]:not(.native-date-input)::-webkit-datetime-edit-ampm-field {
   min-width: 0;
 }
 
@@ -174,8 +177,8 @@ input[type="time"]::-webkit-datetime-edit-ampm-field {
    iOS's date/time inputs are tap-anywhere-to-open, so clipping isn't
    expected to affect usability. Kept even after the real root cause
    below was identified, as a second-layer safety net. */
-input[type="date"],
-input[type="time"] {
+input[type="date"]:not(.native-date-input),
+input[type="time"]:not(.native-date-input) {
   overflow: hidden;
 }
 
@@ -202,18 +205,20 @@ input[type="time"] {
    by pixel-exact measurements and shouldn't have their calendar/clock
    icon affordance removed for no reason.
 
-   Excludes `.keep-native-date-appearance`: my_plate's inline due-date
-   control (see its index.ex) is an invisible, full-size overlay sitting
-   on top of its own separately-rendered label — it never needs the
-   width fix this rule exists for (nothing about it is visibly
-   rendered). sapohub-v1's equivalent control (confirmed still working,
-   including native Reset) never had this override applied to it —
-   dropping an element out of Safari's native rendering path here is
-   the leading suspect for why that native picker's Reset/clear
-   affordance stopped working once this repo's version gained it. */
+   Excludes `.native-date-input`: my_plate's inline due-date control
+   (see its index.ex) is an invisible, full-size overlay sitting on top
+   of its own separately-rendered label — it never needed any of the
+   three width-fix rules above (nothing about it is visibly rendered).
+   sapohub-v1's equivalent control (confirmed by direct user testing to
+   have working native Reset, unlike this repo's port of it) carries
+   NONE of these three overrides at all — it's a fully vanilla
+   `<input type="date">`. An earlier fix here only excluded this
+   control from the appearance:none rule and left the other two
+   applying; that alone didn't restore working Reset, so all three are
+   now excluded together to match v1's control exactly. */
 @supports (-webkit-touch-callout: none) {
-  input[type="date"]:not(.keep-native-date-appearance),
-  input[type="time"]:not(.keep-native-date-appearance) {
+  input[type="date"]:not(.native-date-input),
+  input[type="time"]:not(.native-date-input) {
     -webkit-appearance: none;
     appearance: none;
   }

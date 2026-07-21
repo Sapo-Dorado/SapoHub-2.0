@@ -588,31 +588,28 @@ defmodule MyPlateWeb.Live.Index do
                 </div>
                 <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]" title="Recurring task">↻</span>
                 <%!--
-                  Ported from sapohub-v1's MyPlateLive (confirmed working
-                  there, see lib/sapo_hub_web/live/my_plate_live.ex): a plain
-                  <span> carries the visible label — fully decoupled from
-                  the native input's own rendering, so it's never at the
-                  mercy of `-webkit-appearance:none` (see app.css) making
-                  iOS fall back to unpredictable text, or `placeholder` not
-                  being supported on type=date at all. The real
-                  <input type="date"> sits on top, sized to the FULL padded
-                  box (not shrunk to the label's own text width like earlier
-                  attempts here) so its native segments/clear-icon/reset
-                  affordance have room and aren't clipped — that clipping,
-                  not any inherent platform limitation, is why native
-                  clear/reset appeared broken in prior attempts.
-                  Reset in the native picker didn't work here despite the
-                  interaction otherwise being identical to the add-task
-                  modal's plain, genuinely-rendered date input (below),
-                  where Reset does work — the one difference being this
-                  overlay's `opacity-0`. Some WebKit picker sheets are
-                  suspected of not reliably syncing a cleared value back
-                  to a zero-opacity target even though normal focus/select
-                  interactions are unaffected. `opacity-[0.01]` keeps it
-                  visually indistinguishable from invisible while still
-                  being a "real", non-zero-opacity render target — this
-                  is the leading hypothesis being tested, not a confirmed
-                  fix yet.
+                  Ported from sapohub-v1's MyPlateLive (see
+                  lib/sapo_hub_web/live/my_plate_live.ex) — confirmed by
+                  direct user testing to have working native Reset there,
+                  unlike earlier attempts at this control in this repo. A
+                  plain <span> carries the visible label, fully decoupled
+                  from the native input's own rendering (never at the mercy
+                  of `placeholder` not being supported on type=date, or of
+                  whatever iOS falls back to showing). The real
+                  <input type="date"> sits on top as a normal `opacity-0`
+                  overlay, exactly matching v1's — an earlier attempt here
+                  used `opacity-[0.01]` on a theory that true zero-opacity
+                  broke Reset sync, but v1 uses plain `opacity-0` and works,
+                  so that wasn't it.
+
+                  `.native-date-input` (see app.css) excludes this specific
+                  input from ALL THREE of this repo's global date/time
+                  input CSS overrides (shadow-part min-width zeroing,
+                  overflow:hidden, and iOS's appearance:none) — v1's
+                  equivalent control has none of them applied at all. An
+                  earlier fix here only excluded the appearance:none rule
+                  and left the other two in place, which didn't restore
+                  Reset either; excluding all three matches v1 exactly.
                 --%>
                 <form phx-change="save_due_date" class="shrink-0 whitespace-nowrap flex items-center gap-1">
                   <input type="hidden" name="task_id" value={task.id} />
@@ -634,7 +631,7 @@ defmodule MyPlateWeb.Live.Index do
                       aria-label="Due date"
                       onclick="this.showPicker && this.showPicker()"
                       phx-hook="DueDateDebug"
-                      class="keep-native-date-appearance absolute inset-0 w-full h-full opacity-[0.01] cursor-pointer [color-scheme:dark]"
+                      class="native-date-input absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
                     />
                   </div>
                 </form>
