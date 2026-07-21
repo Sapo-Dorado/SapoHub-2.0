@@ -77,33 +77,37 @@ defmodule SapoCoreWeb.Statusline do
     assigns = assign(assigns, :crumb_segments, crumb_segments(assigns.crumb))
 
     ~H"""
-    <nav class="flex items-center h-11 px-4 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs overflow-x-auto whitespace-nowrap shrink-0 [scrollbar-width:none]">
-      <.link navigate="/" class="text-[#7FB069] font-semibold">sapohub</.link>
-      <%= for {label, to} <- @crumb_segments do %>
-        <span class="text-[#86948F] px-2">/</span>
-        <.link :if={to} navigate={to} class="text-[#86948F] hover:text-[#E6ECE9]">{label}</.link>
-        <span :if={!to} class="text-[#E6ECE9]">{label}</span>
-      <% end %>
+    <nav class="flex items-center justify-between h-11 px-4 border-b border-[#242D31] bg-[#151B1E] font-mono text-xs shrink-0">
+      <div id="statusline-left" phx-hook="StatuslineFit" class="min-w-0 overflow-hidden whitespace-nowrap">
+        <.link navigate="/" class="text-[#7FB069] font-semibold">sapohub</.link>
+        <%= for {label, to} <- @crumb_segments do %>
+          <span class="text-[#86948F] px-2">/</span>
+          <.link :if={to} navigate={to} class="text-[#86948F] hover:text-[#E6ECE9]">{label}</.link>
+          <span :if={!to} class="text-[#E6ECE9]">{label}</span>
+        <% end %>
 
-      <span
-        :for={item <- @items}
-        class="pl-3.5 ml-3.5 border-l border-[#242D31] text-[#86948F]"
-      >
-        <span class={level_class(item.level)}>{item.text}</span>
-      </span>
+        <span
+          :for={item <- @items}
+          data-statusline-item
+          class="pl-3.5 ml-3.5 border-l border-[#242D31] text-[#86948F]"
+        >
+          <span class={level_class(item.level)}>{item.text}</span>
+        </span>
+      </div>
 
-      <span class="flex-1"></span>
-      <span :if={@right} class="text-[#86948F] pr-3.5 mr-3.5 border-r border-[#242D31]">
-        {@right}
-      </span>
-      <span class="text-[#86948F]">{local_clock()}</span>
-      <.link
-        navigate="/settings"
-        aria-label="Settings"
-        class="flex items-center justify-center ml-3.5 -mr-4 h-11 w-11 border-l border-[#242D31] text-[#86948F] hover:text-[#7FB069] hover:bg-[#1A2226] transition-colors"
-      >
-        <.icon name="hero-cog-6-tooth" class="size-[18px]" />
-      </.link>
+      <div class="flex items-center shrink-0 pl-4">
+        <span :if={@right} class="text-[#86948F] pr-3.5 mr-3.5 border-r border-[#242D31]">
+          {@right}
+        </span>
+        <span class="text-[#86948F]">{local_clock()}</span>
+        <.link
+          navigate="/settings"
+          aria-label="Settings"
+          class="flex items-center justify-center ml-3.5 -mr-4 h-11 w-11 border-l border-[#242D31] text-[#86948F] hover:text-[#7FB069] hover:bg-[#1A2226] transition-colors"
+        >
+          <.icon name="hero-cog-6-tooth" class="size-[18px]" />
+        </.link>
+      </div>
     </nav>
     """
   end
