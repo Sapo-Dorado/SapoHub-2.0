@@ -132,6 +132,11 @@ defmodule MyPlateWeb.Live.Index do
     {:noreply, load(socket)}
   end
 
+  def handle_event("clear_due_date", %{"id" => id}, socket) do
+    {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => nil})
+    {:noreply, load(socket)}
+  end
+
   # ── Board scope ──────────────────────────────────────────────────────────
 
   def handle_event("toggle_board_menu", _, socket) do
@@ -584,55 +589,50 @@ defmodule MyPlateWeb.Live.Index do
                   Earlier versions kept those two elements apart to get custom
                   "set due date" wording and custom text color, which forced a
                   JS-driven showPicker()/focus() trigger (broken on mobile, see
-                  git history) and later an invisible overlay (broken
-                  clear/reset — app.css clips input[type=date] overflow at
-                  the input's own too-narrow border box). Styling the real
-                  input directly gets the same look without any of that:
-                  single tap opens it on every platform since it's a genuine,
-                  normal-sized, always-native control, and native clear/reset
-                  works because nothing is clipping or hiding it.
+                  git history) and later an invisible overlay. Styling the
+                  real input directly gets the custom color without any of
+                  that: single tap opens it on every platform since it's a
+                  genuine, normal-sized, always-native control.
 
-                  <input type="date"> ignores the `placeholder` attribute
-                  entirely (browsers only honor it for text-like inputs), so
-                  there's no standard hook for custom empty-state wording.
-                  `has-[input:not([value])]` reacts to the value attribute
-                  LiveView itself renders (present when task.due_date is set,
-                  absent — HEEx omits attrs for nil — otherwise), painting
-                  "set due date" via the form's own ::before instead of a
-                  second element. Paired with hiding just the native
-                  mm/dd/yyyy segments (not the calendar icon) for that same
-                  empty case, via the Chrome/Safari shadow-part selector
-                  already used elsewhere in this file. Firefox doesn't expose
-                  that shadow part (see app.css) so it keeps showing its own
-                  native empty-state text underneath our overlay there —
-                  same Chrome/Safari-first scoping precedent as the rest of
-                  this file's date-input fixes.
+                  Left as the browser's own plain rendering rather than
+                  hiding the native mm/dd/yyyy segments to paint a custom
+                  "set due date" overlay in their place (tried previously —
+                  didn't render reliably on real mobile Safari, worse than
+                  the plain native placeholder it replaced).
+
+                  A separate, explicit × clears the date via its own
+                  "clear_due_date" event instead of relying on the picker's
+                  own reset/cancel affordance — mobile date pickers don't
+                  reliably offer one (iOS's wheel picker has no clear
+                  gesture at all, only Cancel, which reverts rather than
+                  clears), so this is the only way clearing works everywhere.
                 --%>
-                <form
-                  phx-change="save_due_date"
-                  class={[
-                    "relative shrink-0 whitespace-nowrap",
-                    "has-[input:not([value])]:before:content-['set_due_date']",
-                    "has-[input:not([value])]:before:absolute has-[input:not([value])]:before:inset-0",
-                    "has-[input:not([value])]:before:flex has-[input:not([value])]:before:items-center",
-                    "has-[input:not([value])]:before:pointer-events-none has-[input:not([value])]:before:whitespace-nowrap",
-                    "has-[input:not([value])]:before:font-mono has-[input:not([value])]:before:text-[11.5px]",
-                    "has-[input:not([value])]:before:text-[#86948F] has-[input:not([value])]:before:opacity-40",
-                    "group-hover:has-[input:not([value])]:before:opacity-100"
-                  ]}
-                >
+                <form phx-change="save_due_date" class="shrink-0 whitespace-nowrap flex items-center gap-1">
                   <input type="hidden" name="task_id" value={task.id} />
                   <input
                     type="date"
                     name="due_date"
+                    id={"due-date-input-#{task.id}-#{task.due_date}"}
                     value={task.due_date}
                     aria-label="Due date"
                     class={[
-                      "font-mono text-[11.5px] bg-transparent border-none p-0 cursor-pointer focus:outline-none [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden",
-                      "[&:not([value])::-webkit-datetime-edit-fields-wrapper]:opacity-0",
-                      if(task.due_date, do: due_date_class(task.due_date), else: "opacity-40 group-hover:opacity-100")
+                      "font-mono text-[11.5px] bg-transparent border-none p-0 cursor-pointer focus:outline-none [color-scheme:dark]",
+                      if(task.due_date,
+                        do: due_date_class(task.due_date),
+                        else: "text-[#86948F] opacity-40 group-hover:opacity-100"
+                      )
                     ]}
                   />
+                  <button
+                    :if={task.due_date}
+                    type="button"
+                    phx-click="clear_due_date"
+                    phx-value-id={task.id}
+                    aria-label="Clear due date"
+                    class="font-mono text-[#86948F] hover:text-[#E0A458] cursor-pointer"
+                  >
+                    ×
+                  </button>
                 </form>
                 <button
                   phx-click="confirm_delete_task"
