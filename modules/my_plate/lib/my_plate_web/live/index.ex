@@ -77,6 +77,8 @@ defmodule MyPlateWeb.Live.Index do
   end
 
   def handle_event("create_task", %{"task" => params}, socket) do
+    Logger.warning("TEMP DEBUG create_task params=#{inspect(params)}")
+
     params =
       params
       |> Map.put_new("due_date", nil)
@@ -749,6 +751,8 @@ defmodule MyPlateWeb.Live.Index do
             <input
               type="date"
               name="task[due_date]"
+              id="add-task-due-date"
+              phx-hook="DueDateDebug"
               class="w-full min-w-0 box-border pl-3 pr-4 py-[9px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] focus:border-[#7FB069] focus:outline-none [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:mr-0"
             />
           </div>
