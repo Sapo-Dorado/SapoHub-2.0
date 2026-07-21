@@ -11,6 +11,8 @@ defmodule MyPlateWeb.Live.Index do
   """
   use SapoKit.Web, :live_view
 
+  require Logger
+
   alias MyPlate.Board
   alias MyPlate.RecurringTask
 
@@ -126,13 +128,16 @@ defmodule MyPlateWeb.Live.Index do
     {:noreply, load(socket)}
   end
 
-  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date}, socket) do
+  def handle_event("save_due_date", %{"task_id" => id, "due_date" => due_date} = params, socket) do
+    Logger.warning("TEMP DEBUG save_due_date params=#{inspect(params)}")
     due_date = if due_date == "", do: nil, else: due_date
-    {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
+    {:ok, updated} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => due_date})
+    Logger.warning("TEMP DEBUG save_due_date result due_date=#{inspect(updated.due_date)}")
     {:noreply, load(socket)}
   end
 
   def handle_event("clear_due_date", %{"id" => id}, socket) do
+    Logger.warning("TEMP DEBUG clear_due_date id=#{inspect(id)}")
     {:ok, _} = MyPlate.update_task(MyPlate.get_task!(id), %{"due_date" => nil})
     {:noreply, load(socket)}
   end
