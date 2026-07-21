@@ -597,6 +597,18 @@ defmodule MyPlateWeb.Live.Index do
                   affordance have room and aren't clipped — that clipping,
                   not any inherent platform limitation, is why native
                   clear/reset appeared broken in prior attempts.
+                  Reset in the native picker didn't work here despite the
+                  interaction otherwise being identical to the add-task
+                  modal's plain, genuinely-rendered date input (below),
+                  where Reset does work — the one difference being this
+                  overlay's `opacity-0`. Some WebKit picker sheets are
+                  suspected of not reliably syncing a cleared value back
+                  to a zero-opacity target even though normal focus/select
+                  interactions are unaffected. `opacity-[0.01]` keeps it
+                  visually indistinguishable from invisible while still
+                  being a "real", non-zero-opacity render target — this
+                  is the leading hypothesis being tested, not a confirmed
+                  fix yet.
                 --%>
                 <form phx-change="save_due_date" class="shrink-0 whitespace-nowrap flex items-center gap-1">
                   <input type="hidden" name="task_id" value={task.id} />
@@ -616,7 +628,7 @@ defmodule MyPlateWeb.Live.Index do
                       value={task.due_date}
                       aria-label="Due date"
                       onclick="this.showPicker && this.showPicker()"
-                      class="keep-native-date-appearance absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
+                      class="keep-native-date-appearance absolute inset-0 w-full h-full opacity-[0.01] cursor-pointer [color-scheme:dark]"
                     />
                   </div>
                   <button
