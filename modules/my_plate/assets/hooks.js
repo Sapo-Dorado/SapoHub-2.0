@@ -20,40 +20,6 @@ export default {
     },
   },
 
-  // Mounted on the due-date input. Some mobile browsers (notably iOS
-  // Safari) default an EMPTY date picker's wheel to today the instant it
-  // opens, and fire a real `input`/`change` event for that default before
-  // the user has touched anything — which phx-change would otherwise save
-  // as if the user had picked today. A genuine tap-to-select physically
-  // can't land faster than this: focus, render the picker UI, then
-  // register a touch is well over the threshold below. Listening in the
-  // capture phase means this runs before LiveView's own (bubble-phase,
-  // document-delegated) phx-change listener ever sees the event.
-  DueDateGuard: {
-    mounted() {
-      this.focusedAt = 0;
-      this.hadValue = false;
-      this.valueAtFocus = "";
-
-      this.el.addEventListener("focus", () => {
-        this.focusedAt = performance.now();
-        this.hadValue = this.el.value !== "";
-        this.valueAtFocus = this.el.value;
-      });
-
-      const guard = (e) => {
-        if (this.hadValue) return;
-        if (performance.now() - this.focusedAt >= 400) return;
-
-        this.el.value = this.valueAtFocus;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-      };
-      this.el.addEventListener("input", guard, true);
-      this.el.addEventListener("change", guard, true);
-    },
-  },
-
   // Mounted on each priority section's task list. `data-group` is the
   // priority name ("high"/"medium"/"low"); dragging a task into a
   // different section's list re-parents it there. On drop, pushes

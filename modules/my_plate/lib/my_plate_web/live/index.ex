@@ -337,7 +337,7 @@ defmodule MyPlateWeb.Live.Index do
   defp due_date_class(due_date) do
     if Date.compare(due_date, MyPlate.today()) != :gt,
       do: "text-[#E0A458]",
-      else: "text-[#86948F] group-hover/date:text-[#E6ECE9]"
+      else: "text-[#86948F] hover:text-[#E6ECE9]"
   end
 
   defp board_name(boards, board_id) do
@@ -578,53 +578,60 @@ defmodule MyPlateWeb.Live.Index do
                   </span>
                 </div>
                 <span :if={task.recurring_task_id} class="font-mono text-[11px] text-[#86948F]" title="Recurring task">↻</span>
-                <form phx-change="save_due_date" class="group/date relative shrink-0">
-                  <input type="hidden" name="task_id" value={task.id} />
-                  <button
-                    type="button"
-                    tabindex="-1"
-                    aria-hidden="true"
-                    class={[
-                      "font-mono text-[11.5px] whitespace-nowrap transition-opacity pointer-events-none",
-                      if(task.due_date,
-                        do: due_date_class(task.due_date),
-                        else: "text-[#86948F] opacity-40 group-hover:opacity-100 group-hover/date:text-[#E6ECE9]"
-                      )
-                    ]}
-                  >
-                    {task.due_date || "set due date"}
-                  </button>
-                  <%!--
-                    A real <input type="date"> sitting on top of the label button
-                    (opacity-0, not sr-only) rather than a zero-area hidden input
-                    opened via a sibling button's showPicker()/focus() call.
-                    Mobile Safari/Chrome refuse to open the native date/time picker
-                    on an input that has no visible rendered area (which is what
-                    sr-only's clip-path collapses it to) even when
-                    showPicker()/focus() is called from a genuine tap — the tap has
-                    to land on the control itself. Overlaying it keeps the custom
-                    label look while making the tap target the actual input.
+                <%!--
+                  The due-date control IS the native <input type="date"> — no
+                  separate label button, no hidden/overlay input, no JS.
+                  Earlier versions kept those two elements apart to get custom
+                  "set due date" wording and custom text color, which forced a
+                  JS-driven showPicker()/focus() trigger (broken on mobile, see
+                  git history) and later an invisible overlay (broken
+                  clear/reset — app.css clips input[type=date] overflow at
+                  the input's own too-narrow border box). Styling the real
+                  input directly gets the same look without any of that:
+                  single tap opens it on every platform since it's a genuine,
+                  normal-sized, always-native control, and native clear/reset
+                  works because nothing is clipping or hiding it.
 
-                    Anchored to the right (same edge the label renders at) but
-                    given a fixed width well past the label's own short text,
-                    rather than `w-full` matching the button's rendered box:
-                    app.css applies `overflow: hidden` to every
-                    input[type=date] (documented there) so its native segments +
-                    clear-icon + calendar-icon clip at the INPUT's own border
-                    box, not the label's. A width tied to "jul 20" / "set due
-                    date" runs well under the browser's natural minimum for that
-                    internal layout, clipping the native clear-icon out of the
-                    tappable area entirely — invisible either way, so the extra
-                    width costs nothing visually.
-                  --%>
+                  <input type="date"> ignores the `placeholder` attribute
+                  entirely (browsers only honor it for text-like inputs), so
+                  there's no standard hook for custom empty-state wording.
+                  `has-[input:not([value])]` reacts to the value attribute
+                  LiveView itself renders (present when task.due_date is set,
+                  absent — HEEx omits attrs for nil — otherwise), painting
+                  "set due date" via the form's own ::before instead of a
+                  second element. Paired with hiding just the native
+                  mm/dd/yyyy segments (not the calendar icon) for that same
+                  empty case, via the Chrome/Safari shadow-part selector
+                  already used elsewhere in this file. Firefox doesn't expose
+                  that shadow part (see app.css) so it keeps showing its own
+                  native empty-state text underneath our overlay there —
+                  same Chrome/Safari-first scoping precedent as the rest of
+                  this file's date-input fixes.
+                --%>
+                <form
+                  phx-change="save_due_date"
+                  class={[
+                    "relative shrink-0 whitespace-nowrap",
+                    "has-[input:not([value])]:before:content-['set_due_date']",
+                    "has-[input:not([value])]:before:absolute has-[input:not([value])]:before:inset-0",
+                    "has-[input:not([value])]:before:flex has-[input:not([value])]:before:items-center",
+                    "has-[input:not([value])]:before:pointer-events-none has-[input:not([value])]:before:whitespace-nowrap",
+                    "has-[input:not([value])]:before:font-mono has-[input:not([value])]:before:text-[11.5px]",
+                    "has-[input:not([value])]:before:text-[#86948F] has-[input:not([value])]:before:opacity-40",
+                    "group-hover:has-[input:not([value])]:before:opacity-100"
+                  ]}
+                >
+                  <input type="hidden" name="task_id" value={task.id} />
                   <input
                     type="date"
                     name="due_date"
-                    id={"due-date-input-#{task.id}"}
                     value={task.due_date}
                     aria-label="Due date"
-                    phx-hook="DueDateGuard"
-                    class="absolute inset-y-0 right-0 z-10 w-32 opacity-0 cursor-pointer [color-scheme:dark]"
+                    class={[
+                      "font-mono text-[11.5px] bg-transparent border-none p-0 cursor-pointer focus:outline-none [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden",
+                      "[&:not([value])::-webkit-datetime-edit-fields-wrapper]:opacity-0",
+                      if(task.due_date, do: due_date_class(task.due_date), else: "opacity-40 group-hover:opacity-100")
+                    ]}
                   />
                 </form>
                 <button
