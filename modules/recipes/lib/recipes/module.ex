@@ -135,6 +135,15 @@ defmodule Recipes.Module do
     mentions needing to buy something, offer to add it to the shopping list;
     if they mention a dish they cooked or want to save, offer to save it as
     a recipe.
+
+    To import a recipe from an Instagram link: the normal instagram.com/reel
+    or /p/ page hides the full caption behind a login wall and won't render
+    it for a logged-out fetch. Instead fetch `<url>/embed/captioned/` (e.g.
+    `https://www.instagram.com/reel/<id>/embed/captioned/`), which exposes
+    the full caption without login. Don't trust a plain WebFetch of the
+    normal URL for this — the page is a JS-only shell with no caption in the
+    raw HTML, so a model asked to extract one from it may fabricate a
+    plausible-looking recipe instead of reporting there's nothing there.
     """
   end
 end
