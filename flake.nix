@@ -272,7 +272,7 @@
         };
       };
 
-      nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
+      nixosModules.default = import ./nix/nixos-module.nix { inherit self nixpkgs-tools; };
 
       # ── Fresh-machine bootstrap target (nixos-anywhere) ─────────────────────
       # scripts/bootstrap.sh <ip> --hostname fresh-machine targets this by

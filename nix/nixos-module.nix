@@ -4,7 +4,7 @@
 # packages; the user's config flake builds them via lib.mkSapoHub and sets
 # the options below. NO root for the app except the ONE restricted sudo
 # command: sapohub-deploy.
-{ self }:
+{ self, nixpkgs-tools }:
 { config, lib, pkgs, ... }:
 
 with lib;
@@ -23,6 +23,16 @@ let
 
   setSecretScript = import ./secret-script.nix { inherit pkgs lib; } {
     secretsFile = cfg.secretsFile;
+  };
+
+  # Same rationale as this project's tailwind_4/yt-dlp hostPackages usage:
+  # llama-swap's go.mod requires go >= 1.26.1, newer than this project's
+  # pinned `nixpkgs` is likely to carry, so it's built from the
+  # nixos-unstable `nixpkgs-tools` input instead.
+  toolsPkgs = nixpkgs-tools.legacyPackages.${pkgs.system};
+
+  localLlm = import ./local-llm.nix { inherit pkgs lib toolsPkgs; } {
+    models = cfg.assistant.localModels.models;
   };
 
   # ExPTY sets SIGCHLD=SIG_IGN in the forked child before exec'ing claude,
@@ -195,6 +205,108 @@ in
         a real Chrome with a graphical session on a virtual display
         (Xvfb :99, persistent profile) for assistant sessions and skills
       '';
+
+      provider = mkOption {
+        type = types.enum [ "anthropic" "local" ];
+        default = "anthropic";
+        description = ''
+          "anthropic" (default): talk to Anthropic's API directly, as today.
+          "local": point the assistant at this box's own llama-swap router
+          instead, serving whichever models are configured in
+          assistant.localModels.models. Left as an enum (not a bool) so a
+          future "custom" remote-endpoint value (e.g. a third-party
+          Anthropic-API-compatible cloud provider) can slot in later without
+          redesigning this option. Switching providers is a redeploy, not a
+          live/session-level choice — Claude Code reads ANTHROPIC_BASE_URL
+          once at process start, and /model only ever picks among models
+          that SAME endpoint already knows about.
+        '';
+      };
+
+      localModels = {
+        port = mkOption {
+          type = types.port;
+          default = 8901;
+          description = "Port the local llama-swap router listens on (127.0.0.1 only).";
+        };
+
+        defaultModel = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            Key from `models` to set as ANTHROPIC_MODEL, so a fresh session
+            has something loaded without needing to /model first. Leave null
+            to require an explicit /model pick every session (only works if
+            CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY populates the picker
+            from llama-swap's own /v1/models, which this module always sets
+            when provider = "local").
+          '';
+        };
+
+        memoryMax = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          example = "40G";
+          description = ''
+            Optional systemd MemoryMax= on the llama-swap unit (and its
+            child llama-server processes — same cgroup). This box has no
+            other guardrail against a large model starving SapoHub's own
+            services; set this once you know your model's footprint.
+          '';
+        };
+
+        models = mkOption {
+          default = { };
+          description = ''
+            One entry per locally-servable model. Each becomes one
+            llama-swap backend definition, started on demand. weightsPath is
+            the only thing you must set per model — there is deliberately
+            no shared "models directory" option; each entry names its own
+            file, since these are large (tens of GB) out-of-band downloads
+            that must never be copied into the Nix store.
+          '';
+          type = types.attrsOf (types.submodule {
+            options = {
+              weightsPath = mkOption {
+                type = types.str;
+                description = "Absolute path to the GGUF file, e.g. /mnt/storage/models/foo.gguf.";
+              };
+              contextSize = mkOption {
+                type = types.int;
+                default = 8192;
+              };
+              extraArgs = mkOption {
+                type = types.listOf types.str;
+                default = [ "--jinja" ];
+                description = "Extra llama-server flags (--jinja is required for tool-call formatting).";
+              };
+              ttl = mkOption {
+                type = types.nullOr types.int;
+                default = null;
+                description = "Seconds idle before llama-swap unloads this model. Null = llama-swap's global default.";
+              };
+            };
+          });
+        };
+
+        groups = mkOption {
+          type = types.attrsOf (types.submodule {
+            options = {
+              swap = mkOption { type = types.bool; default = true; };
+              members = mkOption { type = types.listOf types.str; };
+            };
+          });
+          default = { };
+          description = ''
+            NOT YET WIRED UP — see nix/local-llm.nix. llama-swap replaced the
+            simple swap/members `groups:` key this option was modeled on with
+            a solver-based `matrix:` DSL, and the translation from this
+            option to that DSL isn't implemented yet. Leave empty (the
+            default) until that lands; a non-empty value fails an assertion
+            below rather than silently doing nothing.
+          '';
+        };
+      };
 
       claudeDefaults = {
         managed = mkOption {
@@ -425,6 +537,27 @@ in
       '';
     in
     {
+      assertions = [
+        {
+          assertion = cfg.assistant.provider != "local" || cfg.assistant.localModels.models != { };
+          message = ''
+            services.sapohub.assistant.provider is "local" but
+            assistant.localModels.models is empty — there's nothing for the
+            local llama-swap router to serve. Add at least one entry, or set
+            provider back to "anthropic".
+          '';
+        }
+        {
+          assertion = cfg.assistant.localModels.groups == { };
+          message = ''
+            services.sapohub.assistant.localModels.groups is set, but that
+            option isn't wired up yet (see nix/local-llm.nix) — llama-swap's
+            concurrent-warm-set feature moved to a `matrix:` DSL this option
+            doesn't render. Leave groups empty for now.
+          '';
+        }
+      ];
+
       users.users.sapohub = {
         isSystemUser = true;
         group = "sapohub";
@@ -600,7 +733,18 @@ in
               pkgs.bash pkgs.coreutils pkgs.git pkgs.curl pkgs.jq
               pkgs.gnutar pkgs.gzip pkgs.openssh pkgs.systemd
             ])}:/run/current-system/sw/bin";
-        };
+        }
+        # Points the assistant at the local llama-swap router instead of
+        # Anthropic's API. See systemd.services.sapohub-llama-swap below —
+        # that's the service actually answering this URL.
+        // lib.optionalAttrs (cfg.assistant.provider == "local") ({
+          ANTHROPIC_BASE_URL = "http://127.0.0.1:${toString cfg.assistant.localModels.port}";
+          # Lets Claude Code populate /model from llama-swap's own
+          # /v1/models instead of requiring exact-string typing.
+          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
+        } // lib.optionalAttrs (cfg.assistant.localModels.defaultModel != null) {
+          ANTHROPIC_MODEL = cfg.assistant.localModels.defaultModel;
+        });
 
         serviceConfig = {
           User = "sapohub";
@@ -617,6 +761,31 @@ in
           ExecStart = "${bin} start";
           Restart = "on-failure";
           RestartSec = 5;
+        };
+      };
+
+      # ── Optional: local model serving (assistant.provider = "local") ──────
+      # Loopback-only, no auth token — only the sapohub user's own process
+      # (systemd.services.sapohub, via ANTHROPIC_BASE_URL above) ever talks
+      # to this port. Nice/IOSchedulingClass deprioritize inference so it
+      # can't stall the app itself; MemoryMax is opt-in since a sane default
+      # depends entirely on which models are configured.
+      systemd.services.sapohub-llama-swap = mkIf (cfg.assistant.provider == "local") {
+        description = "llama-swap router for SapoHub's local assistant models";
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig = {
+          User = "sapohub";
+          Group = "sapohub";
+          ExecStart = "${localLlm.package}/bin/llama-swap"
+            + " -config ${localLlm.configFile}"
+            + " -listen 127.0.0.1:${toString cfg.assistant.localModels.port}";
+          Restart = "on-failure";
+          RestartSec = 5;
+          Nice = 10;
+          IOSchedulingClass = "best-effort";
+          IOSchedulingPriority = 7;
+        } // lib.optionalAttrs (cfg.assistant.localModels.memoryMax != null) {
+          MemoryMax = cfg.assistant.localModels.memoryMax;
         };
       };
 
