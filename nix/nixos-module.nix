@@ -776,12 +776,21 @@ in
         };
       };
 
-      # ── Optional: local model serving (assistant.provider = "local") ──────
+      # ── Optional: local model serving ──────────────────────────────────────
+      # Gated on whether any models are *configured*, deliberately NOT on
+      # assistant.provider == "local" — so you can stand up and test
+      # fetching + serving local models (curl the port directly, watch
+      # sapohub-fetch-models's logs) while the assistant itself stays
+      # pointed at Anthropic the whole time. Flipping provider to "local"
+      # later just repoints the already-running router; it doesn't need to
+      # also newly introduce the models.
+      #
       # Loopback-only, no auth token — only the sapohub user's own process
-      # (systemd.services.sapohub, via ANTHROPIC_BASE_URL above) ever talks
-      # to this port. Nice/IOSchedulingClass deprioritize inference so it
-      # can't stall the app itself; MemoryMax is opt-in since a sane default
-      # depends entirely on which models are configured.
+      # (systemd.services.sapohub, via ANTHROPIC_BASE_URL when provider =
+      # "local") ever talks to this port by default. Nice/IOSchedulingClass
+      # deprioritize inference so it can't stall the app itself; MemoryMax
+      # is opt-in since a sane default depends entirely on which models are
+      # configured.
       #
       # sapohub-fetch-models runs first (see local-llm.nix's fetchScript):
       # oneshot, RemainAfterExit so `systemctl status` reads sanely, no
@@ -789,7 +798,7 @@ in
       # sapohub-llama-swap below, via that unit's own wants/after. Re-runs
       # every start, but the script itself skips any model whose weightsPath
       # already exists, so a normal restart/redeploy doesn't re-fetch.
-      systemd.services.sapohub-fetch-models = mkIf (cfg.assistant.provider == "local") {
+      systemd.services.sapohub-fetch-models = mkIf (cfg.assistant.localModels.models != { }) {
         description = "Fetch configured local assistant model weights (skips files already present)";
         serviceConfig = {
           Type = "oneshot";
@@ -800,7 +809,7 @@ in
         };
       };
 
-      systemd.services.sapohub-llama-swap = mkIf (cfg.assistant.provider == "local") {
+      systemd.services.sapohub-llama-swap = mkIf (cfg.assistant.localModels.models != { }) {
         description = "llama-swap router for SapoHub's local assistant models";
         wantedBy = [ "multi-user.target" ];
         wants = [ "sapohub-fetch-models.service" ];
