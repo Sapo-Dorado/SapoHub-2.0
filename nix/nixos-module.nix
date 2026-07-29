@@ -271,6 +271,18 @@ in
                 type = types.str;
                 description = "Absolute path to the GGUF file, e.g. /mnt/storage/models/foo.gguf.";
               };
+              source = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                example = "https://huggingface.co/.../foo.gguf";
+                description = ''
+                  Optional download URL. When set, sapohub-fetch-models
+                  fetches it to weightsPath before sapohub-llama-swap starts
+                  (skipped if a file already exists there — never re-fetched
+                  or Nix-store-managed). Leave null to keep placing the file
+                  yourself, as before this option existed.
+                '';
+              };
               contextSize = mkOption {
                 type = types.int;
                 default = 8192;
@@ -770,9 +782,29 @@ in
       # to this port. Nice/IOSchedulingClass deprioritize inference so it
       # can't stall the app itself; MemoryMax is opt-in since a sane default
       # depends entirely on which models are configured.
+      #
+      # sapohub-fetch-models runs first (see local-llm.nix's fetchScript):
+      # oneshot, RemainAfterExit so `systemctl status` reads sanely, no
+      # wantedBy of its own — it's pulled in purely as a dependency of
+      # sapohub-llama-swap below, via that unit's own wants/after. Re-runs
+      # every start, but the script itself skips any model whose weightsPath
+      # already exists, so a normal restart/redeploy doesn't re-fetch.
+      systemd.services.sapohub-fetch-models = mkIf (cfg.assistant.provider == "local") {
+        description = "Fetch configured local assistant model weights (skips files already present)";
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          User = "sapohub";
+          Group = "sapohub";
+          ExecStart = "${localLlm.fetchScript}";
+        };
+      };
+
       systemd.services.sapohub-llama-swap = mkIf (cfg.assistant.provider == "local") {
         description = "llama-swap router for SapoHub's local assistant models";
         wantedBy = [ "multi-user.target" ];
+        wants = [ "sapohub-fetch-models.service" ];
+        after = [ "sapohub-fetch-models.service" ];
         serviceConfig = {
           User = "sapohub";
           Group = "sapohub";
