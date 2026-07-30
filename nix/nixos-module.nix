@@ -285,7 +285,17 @@ in
               };
               contextSize = mkOption {
                 type = types.int;
-                default = 8192;
+                default = 65536;
+                description = ''
+                  llama-server's --ctx-size. Claude Code's own system prompt
+                  plus tool definitions already run ~36k tokens before any
+                  conversation history, so anything much below this default
+                  makes every session fail immediately with a
+                  context-exceeded error, regardless of which model is
+                  serving it. Lower per-model only when RAM for the KV
+                  cache is the actual constraint (e.g. a model whose
+                  weights alone already consume most of the box's RAM).
+                '';
               };
               extraArgs = mkOption {
                 type = types.listOf types.str;
