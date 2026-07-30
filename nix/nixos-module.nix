@@ -29,7 +29,21 @@ let
   # llama-swap's go.mod requires go >= 1.26.1, newer than this project's
   # pinned `nixpkgs` is likely to carry, so it's built from the
   # nixos-unstable `nixpkgs-tools` input instead.
-  toolsPkgs = nixpkgs-tools.legacyPackages.${pkgs.system};
+  #
+  # cudaSupport is opt-in (see the option below) rather than baked in here
+  # unconditionally: most boxes running this module have no GPU at all, and
+  # forcing a CUDA-enabled llama-cpp on every consumer would mean an unfree,
+  # much heavier build/download for deployments that can't use it anyway.
+  toolsPkgs =
+    if cfg.assistant.localModels.cudaSupport
+    then import nixpkgs-tools {
+      inherit (pkgs) system;
+      config = {
+        allowUnfree = true;
+        cudaSupport = true;
+      };
+    }
+    else nixpkgs-tools.legacyPackages.${pkgs.system};
 
   localLlm = import ./local-llm.nix { inherit pkgs lib toolsPkgs; } {
     models = cfg.assistant.localModels.models;
@@ -228,6 +242,25 @@ in
           type = types.port;
           default = 8901;
           description = "Port the local llama-swap router listens on (127.0.0.1 only).";
+        };
+
+        cudaSupport = mkOption {
+          type = types.bool;
+          default = false;
+          description = ''
+            Build toolsPkgs.llama-cpp (and its cudaPackages closure) with
+            CUDA support instead of the plain CPU build, via nixpkgs'
+            cudaSupport + allowUnfree config. This only controls how
+            llama-cpp itself is compiled — it does nothing on its own
+            unless the box also has a working NVIDIA driver loaded
+            (services.xserver.videoDrivers = [ "nvidia" ]; plus
+            hardware.nvidia.*, set at the host-config level, not by this
+            module) AND each model's extraArgs actually passes
+            --n-gpu-layers to offload onto it. Off by default since most
+            boxes running this module have no GPU, and turning this on
+            unconditionally would force an unfree, much heavier
+            build/download on every one of them regardless.
+          '';
         };
 
         defaultModel = mkOption {
