@@ -5,7 +5,7 @@ defmodule RecipesWeb.Api.RecipesController do
   alias Recipes.Recipe
 
   def index(conn, params) do
-    json(conn, Enum.map(Recipes.list_recipes(params["q"]), &serialize_summary/1))
+    json(conn, Enum.map(Recipes.list_recipes(params["q"], params["ingredient_id"]), &serialize_summary/1))
   end
 
   def show(conn, %{"id" => id}) do

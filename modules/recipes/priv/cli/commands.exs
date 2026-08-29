@@ -7,9 +7,14 @@
 [
   %{
     name: "recipes",
-    help: "list [--q <query>] | show <id> | create <name> [--directions <text>] | delete <id>",
+    help: "list [--q <query>] [--ingredient-id <id>] | show <id> | create <name> [--directions <text>] | delete <id>",
     actions: [
-      %{action: "list", verb: :list, path: "/recipes", params: [%{key: :q, flag: "--q"}]},
+      %{
+        action: "list",
+        verb: :list,
+        path: "/recipes",
+        params: [%{key: :q, flag: "--q"}, %{key: :ingredient_id, flag: "--ingredient-id"}]
+      },
       %{action: "show", verb: :show, path: "/recipes/:id"},
       %{action: "create", verb: :create, path: "/recipes", args: [:name],
         params: [%{key: :directions, flag: "--directions", default: ""}]},

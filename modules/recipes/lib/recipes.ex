@@ -88,12 +88,21 @@ defmodule Recipes do
 
   # ── Recipes ──────────────────────────────────────────────────────────────
 
-  def list_recipes(query \\ nil) do
+  def list_recipes(query \\ nil, ingredient_id \\ nil) do
     Recipe
     |> maybe_filter_name(query)
+    |> maybe_filter_ingredient(ingredient_id)
     |> order_by([r], asc: r.name)
     |> Repo.all()
     |> Repo.preload(:recipe_ingredients)
+  end
+
+  defp maybe_filter_ingredient(query_ast, nil), do: query_ast
+  defp maybe_filter_ingredient(query_ast, ""), do: query_ast
+
+  defp maybe_filter_ingredient(query_ast, ingredient_id) do
+    matching_recipe_ids = from(ri in RecipeIngredient, where: ri.ingredient_id == ^ingredient_id, select: ri.recipe_id)
+    where(query_ast, [r], r.id in subquery(matching_recipe_ids))
   end
 
   def get_recipe!(id) do
