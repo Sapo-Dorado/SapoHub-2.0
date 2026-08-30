@@ -305,13 +305,12 @@ defmodule SapoCliGen do
     arg_flags = Enum.map_join(args, " ", fn a -> ~s(--arg #{a} "$#{a}") end)
     param_flags = Enum.map_join(params, " ", &flag_expr/1)
 
-    required_fields =
-      Enum.map_join(args, ", ", fn a -> "#{a}: $#{a}" end)
+    required_fields = Enum.map(args, fn a -> "#{a}: $#{a}" end)
 
-    always_present =
+    always_present_fields =
       params
       |> Enum.filter(&Map.has_key?(&1, :default))
-      |> Enum.map_join("", fn p -> ", #{p.key}: #{jq_value(p)}" end)
+      |> Enum.map(fn p -> "#{p.key}: #{jq_value(p)}" end)
 
     optional_fields =
       params
@@ -327,7 +326,7 @@ defmodule SapoCliGen do
         end
       end)
 
-    base = if required_fields == "", do: "{}", else: "{#{required_fields}#{always_present}}"
+    base = "{" <> Enum.join(required_fields ++ always_present_fields, ", ") <> "}"
 
     flags = String.trim("#{arg_flags} #{param_flags}")
     flags = if flags == "", do: "", else: flags <> " "
