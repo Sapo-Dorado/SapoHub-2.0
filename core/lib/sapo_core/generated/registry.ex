@@ -17,7 +17,8 @@ defmodule SapoCore.Generated.Registry do
       Reminders.Module,
       Projects.Module,
       Recipes.Module,
-      Skills.Module
+      Skills.Module,
+      Subscriptions.Module
     ]
   end
 
@@ -30,7 +31,8 @@ defmodule SapoCore.Generated.Registry do
       reminders: %{},
       projects: %{},
       recipes: %{},
-      skills: %{}
+      skills: %{},
+      subscriptions: %{}
     }
   end
 

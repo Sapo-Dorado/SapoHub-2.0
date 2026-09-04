@@ -11,5 +11,6 @@
   {:reminders, "../../modules/reminders"},
   {:projects, "../../modules/projects"},
   {:recipes, "../../modules/recipes"},
-  {:skills, "../../modules/skills"}
+  {:skills, "../../modules/skills"},
+  {:subscriptions, "../../modules/subscriptions"}
 ]

@@ -270,6 +270,15 @@
           cliFragment = true;
           jsHooks = false;
         };
+        subscriptions = {
+          name = "subscriptions";
+          app = "subscriptions";
+          src = ./modules/subscriptions;
+          elixirModule = "Subscriptions.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = false;
+        };
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self nixpkgs-tools; };
