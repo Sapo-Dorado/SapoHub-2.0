@@ -205,7 +205,7 @@ defmodule SubscriptionsWeb.Live.Index do
                 class="w-full box-border px-2.5 py-[7px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] placeholder-[#86948F] focus:border-[#7FB069] focus:outline-none font-mono"
               />
             </div>
-            <div class="w-[70px] flex flex-col gap-1">
+            <div class="w-[48px] flex flex-col gap-1">
               <label class="font-mono text-[10.5px] text-[#86948F]">every</label>
               <input
                 type="number"
@@ -215,7 +215,7 @@ defmodule SubscriptionsWeb.Live.Index do
                 class="w-full box-border px-2 py-[7px] rounded-[4px] bg-[#0D1113] border border-[#242D31] text-sm text-[#E6ECE9] focus:border-[#7FB069] focus:outline-none font-mono"
               />
             </div>
-            <div class="w-[100px] flex flex-col gap-1">
+            <div class="w-[84px] flex flex-col gap-1">
               <label class="font-mono text-[10.5px] text-[#86948F]">unit</label>
               <select
                 name="subscription[interval_unit]"
