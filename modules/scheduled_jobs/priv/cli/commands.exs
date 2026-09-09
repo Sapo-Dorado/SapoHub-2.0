@@ -9,7 +9,7 @@
     name: "scheduled-jobs",
     help:
       "list [--enabled true|false] | show <id> |
-              create <name> --kind bash|prompt --command <cmd> --cron \"<expr>\"
+              create <name> --kind bash|prompt --command <cmd> --cron <expr>
                 [--notify always|on_failure|never] [--destination <id>] [--timeout-ms <n>] |
               edit <id> [--name <n>] [--command <c>] [--cron <expr>]
                 [--notify always|on_failure|never] [--destination <id>] [--timeout-ms <n>] |

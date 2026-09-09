@@ -75,8 +75,11 @@ defmodule ScheduledJobs.Runner do
   # ── command construction ────────────────────────────────────────────────
 
   defp build_command(%Job{kind: "bash"} = job) do
-    sh = System.find_executable("sh") || "/bin/sh"
-    with_timeout(job, sh, ["-c", job.command])
+    # bash, not sh — the job kind is literally "bash" and users write
+    # bash-isms (e.g. `source`), which plain /bin/sh (dash on NixOS)
+    # doesn't support.
+    bash = System.find_executable("bash") || "/bin/bash"
+    with_timeout(job, bash, ["-c", job.command])
   end
 
   defp build_command(%Job{kind: "prompt"} = job) do
@@ -154,10 +157,18 @@ defmodule ScheduledJobs.Runner do
 
   defp notify(%Job{notify_mode: "always"} = job, run), do: do_notify(job, run)
 
+  # Discord webhook content caps at 2000 chars; Telegram is far looser
+  # (~4096). Truncate to the tighter limit so the notify call doesn't
+  # simply fail outright on a chatty job (a report-generating command is
+  # exactly the case this matters for — the whole point of notifying is
+  # usually to deliver what it printed, not just a pass/fail ping).
+  @output_snippet_chars 1500
+
   defp do_notify(job, run) do
     icon = if run.status == "success", do: "✅", else: "❌"
     exit_str = if run.exit_code, do: run.exit_code, else: "?"
-    message = "#{icon} Scheduled job '#{job.name}' #{run.status} (exit #{exit_str})"
+    header = "#{icon} Scheduled job '#{job.name}' #{run.status} (exit #{exit_str})"
+    message = header <> output_snippet(run.output)
 
     # {:error, :no_destination} or any other failure is handled by the
     # facade's caller contract: log and move on, never crash the runner
@@ -165,6 +176,17 @@ defmodule ScheduledJobs.Runner do
     case SapoKit.Notify.send(message, destination_id: job.notify_destination_id) do
       :ok -> :ok
       {:error, reason} -> Logger.warning("ScheduledJobs.Runner: notify failed: #{inspect(reason)}")
+    end
+  end
+
+  defp output_snippet(nil), do: ""
+  defp output_snippet(""), do: ""
+
+  defp output_snippet(output) do
+    if String.length(output) > @output_snippet_chars do
+      "\n\n" <> String.slice(output, 0, @output_snippet_chars) <> "\n… (truncated)"
+    else
+      "\n\n" <> output
     end
   end
 end
