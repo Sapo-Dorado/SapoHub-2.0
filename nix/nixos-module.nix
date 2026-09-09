@@ -220,6 +220,16 @@ in
         (Xvfb :99, persistent profile) for assistant sessions and skills
       '';
 
+      tools.gh.enable = mkEnableOption ''
+        the GitHub CLI (`gh`), system-wide. Authenticates automatically
+        off the same GITHUB_TOKEN already loaded from secretsFile into
+        sapohub.service's environment (used today for config-repo
+        pushes and private flake-input fetches) — `gh` honors
+        GH_TOKEN/GITHUB_TOKEN for non-interactive auth on its own, so
+        this needs no separate `gh auth login` or keyring setup. Its
+        actual capabilities are bounded by that token's scopes.
+      '';
+
       provider = mkOption {
         type = types.enum [ "anthropic" "local" ];
         default = "anthropic";
@@ -669,7 +679,9 @@ in
         '';
       };
 
-      environment.systemPackages = [ cfg.cliPackage deployScript setSecretScript ] ++ cfg.hostPackages;
+      environment.systemPackages = [ cfg.cliPackage deployScript setSecretScript ]
+        ++ cfg.hostPackages
+        ++ lib.optional cfg.assistant.tools.gh.enable pkgs.gh;
 
       # Nix-declared prefs base; the app overlays local UI edits on top.
       environment.etc."sapohub/prefs.json".text = builtins.toJSON cfg.prefs;
@@ -779,12 +791,15 @@ in
           # print-proxy-prep) come after cliPackage and before the fixed
           # core toolset below — nothing here should collide with those,
           # but core wins on a name clash either way (makeBinPath keeps
-          # first-listed on PATH first).
+          # first-listed on PATH first). gh rides alongside hostPackages
+          # for the same reason, gated on assistant.tools.gh.enable.
           PATH = lib.mkForce
             "/run/wrappers/bin:${lib.makeBinPath ([
               claudeWrapper
               cfg.cliPackage
-            ] ++ cfg.hostPackages ++ [
+            ] ++ cfg.hostPackages
+            ++ lib.optional cfg.assistant.tools.gh.enable pkgs.gh
+            ++ [
               pkgs.bash pkgs.coreutils pkgs.git pkgs.curl pkgs.jq
               pkgs.gnutar pkgs.gzip pkgs.openssh pkgs.systemd
             ])}:/run/current-system/sw/bin";
