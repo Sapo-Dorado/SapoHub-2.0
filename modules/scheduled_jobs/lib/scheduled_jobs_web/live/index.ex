@@ -340,16 +340,16 @@ defmodule ScheduledJobsWeb.Live.Index do
     ~H"""
     <li class="flex items-center gap-3 px-3 py-3">
       <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <.link navigate={"/scheduled-jobs/#{@job.id}"} class="text-sm hover:underline">{@job.name}</.link>
-          <span class="inline-flex items-center justify-center leading-none font-mono text-[10px] px-1.5 py-[3px] rounded-[3px] border border-[#242D31] text-[#86948F] uppercase tracking-wide">
-            {@job.kind}
-          </span>
-        </div>
+        <.link navigate={"/scheduled-jobs/#{@job.id}"} class="text-sm hover:underline">{@job.name}</.link>
         <p class="font-mono text-[10.5px] text-[#86948F] mt-0.5">{describe_cron(@job.cron)}</p>
       </div>
 
-      <span class="font-mono text-[10.5px] shrink-0" style={"color: #{@badge_color}"}>{@badge_label}</span>
+      <div class="flex flex-col items-center gap-1 shrink-0">
+        <span class="inline-flex items-center justify-center leading-none font-mono text-[10px] px-1.5 py-[3px] rounded-[3px] border border-[#242D31] text-[#86948F] uppercase tracking-wide">
+          {@job.kind}
+        </span>
+        <span class="font-mono text-[10.5px]" style={"color: #{@badge_color}"}>{@badge_label}</span>
+      </div>
 
       <label class="shrink-0">
         <input type="checkbox" checked={@job.enabled} phx-click="toggle_enabled" phx-value-id={@job.id} class="peer hidden" />
