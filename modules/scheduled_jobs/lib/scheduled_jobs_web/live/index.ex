@@ -10,7 +10,6 @@ defmodule ScheduledJobsWeb.Live.Index do
   """
   use SapoKit.Web, :live_view
 
-  alias ScheduledJobs.Cron
   alias ScheduledJobs.Cron.Builder
   alias ScheduledJobs.Job
 
@@ -22,7 +21,13 @@ defmodule ScheduledJobsWeb.Live.Index do
 
     {:ok,
      socket
-     |> assign(job_editing: nil, job_form: nil, job_form_error: nil, form_key: 0)
+     |> assign(
+       job_editing: nil,
+       job_form: nil,
+       job_form_error: nil,
+       form_key: 0,
+       confirm_delete: nil
+     )
      |> load()}
   end
 
@@ -78,15 +83,19 @@ defmodule ScheduledJobsWeb.Live.Index do
     {:noreply, load(socket)}
   end
 
-  def handle_event("run_now", %{"id" => id}, socket) do
-    job = ScheduledJobs.get_job!(id)
-    {:ok, _run} = ScheduledJobs.Runner.run_async(job, "manual")
-    {:noreply, socket |> put_flash(:info, "Started '#{job.name}'") |> load()}
+  def handle_event("request_delete", %{"id" => id}, socket) do
+    {:noreply,
+     socket
+     |> assign(job_editing: nil, job_form: nil, job_form_error: nil, confirm_delete: ScheduledJobs.get_job!(id))}
   end
 
-  def handle_event("delete_job", %{"id" => id}, socket) do
-    {:ok, _job} = ScheduledJobs.delete_job(id)
-    {:noreply, socket |> assign(job_editing: nil) |> load()}
+  def handle_event("cancel_delete", _params, socket) do
+    {:noreply, assign(socket, confirm_delete: nil)}
+  end
+
+  def handle_event("delete_job", _params, socket) do
+    {:ok, _job} = ScheduledJobs.delete_job(socket.assigns.confirm_delete)
+    {:noreply, socket |> assign(confirm_delete: nil) |> load()}
   end
 
   @impl true
@@ -111,11 +120,16 @@ defmodule ScheduledJobsWeb.Live.Index do
   defp schedule_fields({:every_hours, n}),
     do: %{"schedule_type" => "every_hours", "every_n" => to_string(n)}
 
-  defp schedule_fields({:daily, h, m}),
-    do: %{"schedule_type" => "daily", "at" => hhmm(h, m)}
+  defp schedule_fields({:daily, h, m}) do
+    {lh, lm, _shift} = Builder.utc_to_local(h, m)
+    %{"schedule_type" => "daily", "at" => hhmm(lh, lm)}
+  end
 
-  defp schedule_fields({:weekly, days, h, m}),
-    do: %{"schedule_type" => "weekly", "at" => hhmm(h, m), "days" => Enum.map(days, &to_string/1)}
+  defp schedule_fields({:weekly, days, h, m}) do
+    {lh, lm, shift} = Builder.utc_to_local(h, m)
+    local_days = Enum.map(days, &Builder.shift_day(&1, shift))
+    %{"schedule_type" => "weekly", "at" => hhmm(lh, lm), "days" => Enum.map(local_days, &to_string/1)}
+  end
 
   defp schedule_fields({:custom, expr}),
     do: %{"schedule_type" => "custom", "custom_cron" => expr}
@@ -133,15 +147,22 @@ defmodule ScheduledJobsWeb.Live.Index do
     |> Builder.to_cron()
   end
 
+  # The "at" time in the create/edit form is always local (the hub's
+  # configured display timezone) — `Builder.local_to_utc/2` converts to
+  # what `ScheduledJobs.Cron`/`TickHook` actually match against (UTC),
+  # including the day-of-week shift a whole-hour zone offset can cause
+  # (e.g. 11pm Pacific is already the next day in UTC).
   defp daily_preset(params) do
     {h, m} = split_time(params["at"])
-    {:daily, h, m}
+    {uh, um, _shift} = Builder.local_to_utc(h, m)
+    {:daily, uh, um}
   end
 
   defp weekly_preset(params) do
     {h, m} = split_time(params["at"])
-    days = (params["days"] || []) |> Enum.map(&String.to_integer/1)
-    {:weekly, days, h, m}
+    {uh, um, shift} = Builder.local_to_utc(h, m)
+    days = (params["days"] || []) |> Enum.map(&String.to_integer/1) |> Enum.map(&Builder.shift_day(&1, shift))
+    {:weekly, days, uh, um}
   end
 
   defp split_time(str) when is_binary(str) do
@@ -169,12 +190,7 @@ defmodule ScheduledJobsWeb.Live.Index do
 
   defp to_positive_int(_, default), do: default
 
-  defp describe_cron(cron_string) do
-    case Cron.parse(cron_string) do
-      {:ok, cron} -> Cron.describe(cron)
-      {:error, _} -> cron_string
-    end
-  end
+  defp describe_cron(cron_string), do: Builder.describe_local(cron_string)
 
   defp format_changeset_error(changeset) do
     changeset.errors
@@ -225,6 +241,14 @@ defmodule ScheduledJobsWeb.Live.Index do
         <.job_form form={@job_form} error={@job_form_error} form_key={@form_key} />
         <:actions>
           <button
+            :if={@job_editing != :new}
+            phx-click="request_delete"
+            phx-value-id={@job_editing}
+            class="px-3 py-[7px] rounded-[4px] border border-[#5A2A24] text-[#E05C5C] font-mono text-[11.5px] hover:bg-[#5A2A24]/20 cursor-pointer mr-auto"
+          >
+            delete
+          </button>
+          <button
             phx-click="cancel_job_form"
             class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[11.5px] text-[#86948F] hover:text-[#E6ECE9] cursor-pointer"
           >
@@ -239,6 +263,49 @@ defmodule ScheduledJobsWeb.Live.Index do
           </button>
         </:actions>
       </.modal>
+
+      <.confirm_modal
+        :if={@confirm_delete}
+        title="delete job"
+        message={"Delete '#{@confirm_delete.name}'? Its run history will be deleted too."}
+        confirm_event="delete_job"
+        confirm_label="delete"
+        confirm_class="border-[#5A2A24] text-[#E05C5C] hover:bg-[#5A2A24]/20"
+        cancel_event="cancel_delete"
+      />
+    </div>
+    """
+  end
+
+  attr :title, :string, required: true
+  attr :message, :string, required: true
+  attr :confirm_event, :string, required: true
+  attr :confirm_label, :string, required: true
+  attr :confirm_class, :string, required: true
+  attr :cancel_event, :string, required: true
+
+  defp confirm_modal(assigns) do
+    ~H"""
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" phx-window-keydown={@cancel_event} phx-key="Escape">
+      <div class="absolute inset-0 bg-black/60" phx-click={@cancel_event}></div>
+      <div class="relative rounded-[6px] bg-[#151B1E] border border-[#242D31] max-w-sm w-full p-5 space-y-4">
+        <p class="font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">{@title}</p>
+        <p class="text-sm text-[#E6ECE9]">{@message}</p>
+        <div class="flex justify-end gap-2">
+          <button
+            phx-click={@cancel_event}
+            class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[11.5px] text-[#86948F] hover:text-[#E6ECE9] cursor-pointer"
+          >
+            cancel
+          </button>
+          <button
+            phx-click={@confirm_event}
+            class={["px-3 py-[7px] rounded-[4px] border font-mono text-[11.5px] cursor-pointer", @confirm_class]}
+          >
+            {@confirm_label}
+          </button>
+        </div>
+      </div>
     </div>
     """
   end
@@ -275,7 +342,7 @@ defmodule ScheduledJobsWeb.Live.Index do
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <.link navigate={"/scheduled-jobs/#{@job.id}"} class="text-sm hover:underline">{@job.name}</.link>
-          <span class="font-mono text-[10px] px-1.5 py-[1px] rounded-[3px] border border-[#242D31] text-[#86948F] uppercase tracking-wide">
+          <span class="inline-flex items-center justify-center leading-none font-mono text-[10px] px-1.5 py-[3px] rounded-[3px] border border-[#242D31] text-[#86948F] uppercase tracking-wide">
             {@job.kind}
           </span>
         </div>
@@ -292,9 +359,14 @@ defmodule ScheduledJobsWeb.Live.Index do
       </label>
 
       <div class="flex items-center gap-2 shrink-0">
-        <button phx-click="run_now" phx-value-id={@job.id} aria-label="Run now" class="font-mono text-[11px] text-[#86948F] hover:text-[#7FB069] cursor-pointer">▶</button>
-        <button phx-click="edit_job" phx-value-id={@job.id} aria-label="Edit job" class="font-mono text-[11px] text-[#4A5458] hover:text-[#E6ECE9] cursor-pointer">✎</button>
-        <button phx-click="delete_job" phx-value-id={@job.id} data-confirm="Delete this job?" aria-label="Delete job" class="font-mono text-[#86948F] hover:text-[#C1594A] cursor-pointer">×</button>
+        <button
+          phx-click="edit_job"
+          phx-value-id={@job.id}
+          aria-label="Edit job"
+          class="w-7 h-7 flex items-center justify-center rounded-[4px] border border-[#242D31] font-mono text-[12px] text-[#86948F] hover:text-[#E6ECE9] hover:border-[#3C5934] cursor-pointer"
+        >
+          ✎
+        </button>
       </div>
     </li>
     """

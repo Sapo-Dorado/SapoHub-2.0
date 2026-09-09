@@ -5,7 +5,17 @@ defmodule ScheduledJobs.Cron.Builder do
   is the source of truth for matching; this module only translates for
   display/editing so the UI never has to show raw cron syntax unless the
   user explicitly picks "custom".
+
+  Also owns the local-timezone boundary for "daily"/"weekly" presets:
+  `ScheduledJobs.Cron` matches in UTC (correct — that's what the tick
+  hook actually compares against) and stays timezone-agnostic on
+  purpose, but a person authoring "daily at 10:00" means their own
+  local time (`SapoKit.Time`, same facade every module uses), not UTC.
   """
+
+  alias ScheduledJobs.Cron
+
+  @weekday_short %{0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed", 4 => "Thu", 5 => "Fri", 6 => "Sat"}
 
   @doc """
   Builds a canonical cron string from a preset.
@@ -89,5 +99,66 @@ defmodule ScheduledJobs.Cron.Builder do
       :error -> :error
       days -> Enum.reverse(days)
     end
+  end
+
+  @doc """
+  Human-readable schedule description in the hub's LOCAL display
+  timezone — the counterpart to `ScheduledJobs.Cron.describe/1`, which
+  only knows UTC. Falls back to `Cron.describe/1` for any shape other
+  than daily/weekly (every-N-minutes/hours don't shift across a
+  whole-hour zone offset, so those are already correct as-is).
+  """
+  @spec describe_local(String.t()) :: String.t()
+  def describe_local(cron_string) do
+    case Cron.parse(cron_string) do
+      {:ok, cron} ->
+        case Cron.daily_or_weekly(cron) do
+          {:daily, h, m} ->
+            {lh, lm, _shift} = utc_to_local(h, m)
+            "daily at #{hhmm(lh, lm)}"
+
+          {:weekly, days, h, m} ->
+            {lh, lm, shift} = utc_to_local(h, m)
+            "weekly on #{weekday_names(Enum.map(days, &shift_day(&1, shift)))} at #{hhmm(lh, lm)}"
+
+          nil ->
+            Cron.describe(cron)
+        end
+
+      {:error, _} ->
+        cron_string
+    end
+  end
+
+  @doc "Converts a local HH:MM to UTC, returning `{hour, minute, day_shift}` — `day_shift` is -1/0/1 depending on whether the zone offset pushed the moment into the previous/same/next calendar day."
+  @spec local_to_utc(non_neg_integer(), non_neg_integer()) ::
+          {non_neg_integer(), non_neg_integer(), integer()}
+  def local_to_utc(h, m) do
+    zone = SapoKit.Time.zone_name()
+    ref_date = Date.utc_today()
+    {:ok, local_dt} = DateTime.new(ref_date, Time.new!(h, m, 0), zone)
+    utc_dt = DateTime.shift_zone!(local_dt, "Etc/UTC")
+    {utc_dt.hour, utc_dt.minute, Date.diff(DateTime.to_date(utc_dt), ref_date)}
+  end
+
+  @doc "Converts a UTC HH:MM to local, returning `{hour, minute, day_shift}` (see `local_to_utc/2`)."
+  @spec utc_to_local(non_neg_integer(), non_neg_integer()) ::
+          {non_neg_integer(), non_neg_integer(), integer()}
+  def utc_to_local(h, m) do
+    zone = SapoKit.Time.zone_name()
+    ref_date = Date.utc_today()
+    {:ok, utc_dt} = DateTime.new(ref_date, Time.new!(h, m, 0), "Etc/UTC")
+    local_dt = DateTime.shift_zone!(utc_dt, zone)
+    {local_dt.hour, local_dt.minute, Date.diff(DateTime.to_date(local_dt), ref_date)}
+  end
+
+  @doc "Applies a `local_to_utc/2`/`utc_to_local/2` day_shift to a cron day-of-week (0=Sun..6=Sat)."
+  @spec shift_day(non_neg_integer(), integer()) :: non_neg_integer()
+  def shift_day(dow, shift), do: rem(dow + shift + 7, 7)
+
+  defp hhmm(h, m), do: :io_lib.format("~2..0B:~2..0B", [h, m]) |> to_string()
+
+  defp weekday_names(days) do
+    days |> Enum.sort() |> Enum.map(&Map.fetch!(@weekday_short, &1)) |> Enum.join(",")
   end
 end

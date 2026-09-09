@@ -9,7 +9,7 @@ defmodule ScheduledJobsWeb.Live.Show do
   """
   use SapoKit.Web, :live_view
 
-  alias ScheduledJobs.Cron
+  alias ScheduledJobs.Cron.Builder
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -19,7 +19,7 @@ defmodule ScheduledJobsWeb.Live.Show do
 
     {:ok,
      socket
-     |> assign(job: job, tail_run_id: nil, log_lines: [], expanded_run_id: nil)
+     |> assign(job: job, tail_run_id: nil, log_lines: [], expanded_run_id: nil, confirm_run: false)
      |> load_runs()}
   end
 
@@ -56,9 +56,22 @@ defmodule ScheduledJobsWeb.Live.Show do
   end
 
   @impl true
+  def handle_event("request_run", _params, socket) do
+    {:noreply, assign(socket, confirm_run: true)}
+  end
+
+  def handle_event("cancel_run", _params, socket) do
+    {:noreply, assign(socket, confirm_run: false)}
+  end
+
   def handle_event("run_now", _params, socket) do
     {:ok, _run} = ScheduledJobs.Runner.run_async(socket.assigns.job, "manual")
-    {:noreply, socket |> put_flash(:info, "Started '#{socket.assigns.job.name}'") |> load_runs()}
+
+    {:noreply,
+     socket
+     |> assign(confirm_run: false)
+     |> put_flash(:info, "Started '#{socket.assigns.job.name}'")
+     |> load_runs()}
   end
 
   def handle_event("toggle_run", %{"id" => id}, socket) do
@@ -81,12 +94,7 @@ defmodule ScheduledJobsWeb.Live.Show do
     end
   end
 
-  defp describe_cron(cron_string) do
-    case Cron.parse(cron_string) do
-      {:ok, cron} -> Cron.describe(cron)
-      {:error, _} -> cron_string
-    end
-  end
+  defp describe_cron(cron_string), do: Builder.describe_local(cron_string)
 
   defp duration(%{started_at: s, finished_at: f}) when not is_nil(f) do
     secs = DateTime.diff(f, s, :second)
@@ -118,7 +126,7 @@ defmodule ScheduledJobsWeb.Live.Show do
             </p>
           </div>
           <button
-            phx-click="run_now"
+            phx-click="request_run"
             class="px-3 py-[7px] rounded-[4px] border border-[#3C5934] bg-[#151B1E] font-mono text-[11.5px] text-[#7FB069] hover:bg-[#1B2420] cursor-pointer"
           >
             run now
@@ -157,6 +165,28 @@ defmodule ScheduledJobsWeb.Live.Show do
           </li>
         </ul>
       </main>
+
+      <div :if={@confirm_run} class="fixed inset-0 z-50 flex items-center justify-center p-4" phx-window-keydown="cancel_run" phx-key="Escape">
+        <div class="absolute inset-0 bg-black/60" phx-click="cancel_run"></div>
+        <div class="relative rounded-[6px] bg-[#151B1E] border border-[#242D31] max-w-sm w-full p-5 space-y-4">
+          <p class="font-mono text-[11px] font-semibold uppercase tracking-[.14em] text-[#86948F]">run now</p>
+          <p class="text-sm text-[#E6ECE9]">Run '{@job.name}' now, outside its regular schedule?</p>
+          <div class="flex justify-end gap-2">
+            <button
+              phx-click="cancel_run"
+              class="px-3 py-[7px] rounded-[4px] border border-[#242D31] font-mono text-[11.5px] text-[#86948F] hover:text-[#E6ECE9] cursor-pointer"
+            >
+              cancel
+            </button>
+            <button
+              phx-click="run_now"
+              class="px-3 py-[7px] rounded-[4px] border border-[#3C5934] text-[#7FB069] hover:bg-[#3C5934]/20 font-mono text-[11.5px] cursor-pointer"
+            >
+              run
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
     """
   end

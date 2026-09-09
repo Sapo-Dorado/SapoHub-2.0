@@ -139,6 +139,34 @@ defmodule ScheduledJobs.Cron do
     end
   end
 
+  @doc """
+  If `cron` is a "daily" or "weekly" shape (single minute+hour, wildcard
+  day-of-month+month), returns its UTC hour/minute (and days, for
+  weekly) so a caller can convert to a display timezone — this module
+  stays timezone-agnostic on purpose (matching happens in UTC), so that
+  conversion is the caller's job (see `ScheduledJobsWeb.Live.Index`,
+  which uses this to show/accept local time instead of raw UTC).
+  `nil` for any other shape (every-N-minutes, custom multi-value
+  fields, ...).
+  """
+  @spec daily_or_weekly(t()) ::
+          {:daily, non_neg_integer(), non_neg_integer()}
+          | {:weekly, [non_neg_integer()], non_neg_integer(), non_neg_integer()}
+          | nil
+  def daily_or_weekly(%__MODULE__{} = cron) do
+    dom_wild? = wild?(cron.dom, @dom_range)
+    month_wild? = wild?(cron.month, @month_range)
+    dow_wild? = wild?(cron.dow, 0..6)
+
+    if single?(cron.minute) and single?(cron.hour) and dom_wild? and month_wild? do
+      [h] = MapSet.to_list(cron.hour)
+      [m] = MapSet.to_list(cron.minute)
+      if dow_wild?, do: {:daily, h, m}, else: {:weekly, Enum.sort(cron.dow), h, m}
+    else
+      nil
+    end
+  end
+
   defp single?(field_set), do: MapSet.size(field_set) == 1
 
   # Returns the step `n` if `field_set` is exactly "every n units" over
