@@ -18,7 +18,8 @@ defmodule SapoCore.Generated.Registry do
       Projects.Module,
       Recipes.Module,
       Skills.Module,
-      Subscriptions.Module
+      Subscriptions.Module,
+      ScheduledJobs.Module
     ]
   end
 
@@ -32,7 +33,8 @@ defmodule SapoCore.Generated.Registry do
       projects: %{},
       recipes: %{},
       skills: %{},
-      subscriptions: %{}
+      subscriptions: %{},
+      scheduled_jobs: %{}
     }
   end
 

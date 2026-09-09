@@ -279,6 +279,15 @@
           cliFragment = true;
           jsHooks = false;
         };
+        scheduled_jobs = {
+          name = "scheduled_jobs";
+          app = "scheduled_jobs";
+          src = ./modules/scheduled_jobs;
+          elixirModule = "ScheduledJobs.Module";
+          config = { };
+          cliFragment = true;
+          jsHooks = false;
+        };
       };
 
       nixosModules.default = import ./nix/nixos-module.nix { inherit self nixpkgs-tools; };

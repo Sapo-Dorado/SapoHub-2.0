@@ -12,5 +12,6 @@
   {:projects, "../../modules/projects"},
   {:recipes, "../../modules/recipes"},
   {:skills, "../../modules/skills"},
-  {:subscriptions, "../../modules/subscriptions"}
+  {:subscriptions, "../../modules/subscriptions"},
+  {:scheduled_jobs, "../../modules/scheduled_jobs"}
 ]
